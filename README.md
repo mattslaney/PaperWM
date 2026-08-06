@@ -210,7 +210,7 @@ When the tiling is active <kbd>Super</kbd><kbd>Shift</kbd><kbd>Tab</kbd> selects
 
 <kbd>Super</kbd><kbd>Ctrl</kbd><kbd>Escape</kbd> immediately tiles the focused scratch window. When a tiled window is focused, follow the shortcut with a layer key to move it into that scratch layer. This functionality can also be accessed for layer `0` through the window context menu (<kbd>Alt</kbd><kbd>Space</kbd>).
 
-The <kbd>Tab</kbd> continuation after <kbd>Super</kbd><kbd>Escape</kbd> is available for 750 milliseconds; layer-key chords then time out after two seconds and can be cancelled with <kbd>Escape</kbd>. A hint showing occupied layers is enabled by default and can be disabled from PaperWM's General settings.
+The <kbd>Tab</kbd> continuation and layer-key chords time out after two seconds and can be cancelled with <kbd>Escape</kbd>. Tab may be pressed while <kbd>Super</kbd> is still held. A hint showing occupied layers is enabled by default and can be disabled from PaperWM's General settings.
 
 Applications can be assigned to a layer automatically from the `Winprops` settings tab by entering a scratch layer key for their window rule.
 

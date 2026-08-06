@@ -17,7 +17,6 @@ const scratchLayer = Symbol.for('paperwm.scratch-layer');
 const scratchFrame = Symbol.for('paperwm.scratch-frame');
 const DEFAULT_LAYER = '0';
 const CHORD_TIMEOUT_MS = 2000;
-const RECENT_CONTINUATION_TIMEOUT_MS = 750;
 
 let chord, operationIdleId;
 export function enable() {
@@ -536,11 +535,8 @@ class ScratchContinuation {
 
             const key = event.get_key_symbol();
             const modifierMask =
-                Clutter.ModifierType.SHIFT_MASK |
                 Clutter.ModifierType.CONTROL_MASK |
-                Clutter.ModifierType.MOD1_MASK |
-                Clutter.ModifierType.META_MASK |
-                Clutter.ModifierType.SUPER_MASK;
+                Clutter.ModifierType.MOD1_MASK;
             if ((key === Clutter.KEY_Tab || key === Clutter.KEY_ISO_Left_Tab) &&
                 !(event.get_state() & modifierMask)) {
                 this.close();
@@ -553,7 +549,7 @@ class ScratchContinuation {
         });
         this.timeoutId = GLib.timeout_add(
             GLib.PRIORITY_DEFAULT,
-            RECENT_CONTINUATION_TIMEOUT_MS,
+            CHORD_TIMEOUT_MS,
             () => {
                 this.timeoutId = null;
                 this.close();
