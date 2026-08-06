@@ -11,6 +11,7 @@ import { AcceleratorParse } from './acceleratorparse.js';
 
 const KEYBINDINGS_KEY = 'org.gnome.shell.extensions.paperwm.keybindings';
 const RESTORE_KEYBINDS_KEY = 'restore-keybinds';
+export const CHORD_KEYBINDINGS_KEY = 'chord-keybindings';
 
 // This is the value mutter uses for the keyvalue of above_tab
 const META_KEY_ABOVE_TAB = 0x2f7259c9;
@@ -178,6 +179,43 @@ export function keystrToKeycombo(keystr) {
     return `${key}|${mask}`; // Since js doesn't have a mapable tuple type
 }
 
+export function getChordKeybindings(settings = gsettings) {
+    return settings.get_strv(CHORD_KEYBINDINGS_KEY).flatMap(value => {
+        try {
+            const chord = JSON.parse(value);
+            if (typeof chord.action === 'string' &&
+                typeof chord.prefix === 'string' &&
+                typeof chord.key === 'string') {
+                return [chord];
+            }
+        } catch (error) {
+            console.warn(`Ignoring invalid chorded keybinding: ${error.message}`);
+        }
+        return [];
+    });
+}
+
+export function setChordKeybindings(chords, settings = gsettings) {
+    settings.set_strv(
+        CHORD_KEYBINDINGS_KEY,
+        chords.map(({ action, prefix, key }) => JSON.stringify({ action, prefix, key }))
+    );
+}
+
+function generateChordKeycomboMap(settings) {
+    let map = {};
+    for (const chord of getChordKeybindings(settings)) {
+        const combo = keystrToKeycombo(chord.prefix);
+        if (combo === '0|0')
+            continue;
+        if (map[combo])
+            map[combo].push(chord.action);
+        else
+            map[combo] = [chord.action];
+    }
+    return map;
+}
+
 export function generateKeycomboMap(settings) {
     let map = {};
     for (let name of settings.list_keys()) {
@@ -202,6 +240,10 @@ export function findConflicts(schemas) {
     schemas = schemas || getConflictSettings();
     let conflicts = [];
     const paperMap = generateKeycomboMap(keybindSettings);
+    const chordMap = generateChordKeycomboMap(gsettings);
+    for (const combo in chordMap) {
+        paperMap[combo] = [...(paperMap[combo] || []), ...chordMap[combo]];
+    }
 
     for (let settings of schemas) {
         const against = generateKeycomboMap(settings);
