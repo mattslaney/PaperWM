@@ -15,6 +15,10 @@ const display = global.display;
 
 const KEYBINDINGS_KEY = 'org.gnome.shell.extensions.paperwm.keybindings';
 const CHORD_TIMEOUT_MS = 2000;
+const KEYED_SCRATCH_ACTIONS = new Set([
+    'toggle-keyed-scratch-layer',
+    'toggle-keyed-scratch',
+]);
 
 let keybindSettings, chordSettings;
 export function enable(extension) {
@@ -27,8 +31,9 @@ export function enable(extension) {
     signals.connect(display, 'accelerator-activated', (display, actionId, deviceId, timestamp) => {
         handleAccelerator(display, actionId, deviceId, timestamp);
     });
-    actions.forEach(enableAction);
     Settings.overrideConflicts();
+    enableReservedPrefixes();
+    actions.filter(action => !action.options.reservedPrefix).forEach(enableAction);
     enableChords();
 
     signals.connect(chordSettings, `changed::${Settings.CHORD_KEYBINDINGS_KEY}`, () => {
@@ -47,13 +52,14 @@ export function enable(extension) {
                     `this Gnome Keybind will be restored when PaperWM is disabled`);
             }
             if (settings === keybindSettings)
-                queueChordReload();
+                queueChordReload(KEYED_SCRATCH_ACTIONS.has(key));
         });
     });
 }
 
 export function disable() {
     disableChords();
+    disableReservedPrefixes();
     signals.destroy();
     signals = null;
     actions.forEach(disableAction);
@@ -65,11 +71,16 @@ export function disable() {
     nameMap = null;
     actionIdMap = null;
     keycomboMap = null;
+    reservedDisplacedActions.clear();
 }
 
 let chordPrefixes = new Map();
+let reservedPrefixes = new Map();
+let reservedPrefixCombos = new Set();
 let activeChord = null;
 let chordReloadId = null;
+let reloadReservedPrefixes = false;
+const reservedDisplacedActions = new Set();
 const pendingChordActions = new Set();
 
 export function prepareForDisable() {
@@ -80,14 +91,34 @@ export function prepareForDisable() {
     pendingChordActions.clear();
     Utils.timeout_remove(chordReloadId);
     chordReloadId = null;
+    reloadReservedPrefixes = false;
 }
 
-function queueChordReload() {
+function queueChordReload(reloadReserved = false) {
+    reloadReservedPrefixes ||= reloadReserved;
     if (chordReloadId)
         return;
     chordReloadId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
         chordReloadId = null;
+        const reloadReserved = reloadReservedPrefixes;
+        reloadReservedPrefixes = false;
         disableChords();
+        if (reloadReserved) {
+            const reloadActions = actions.filter(action =>
+                !action.options.reservedPrefix &&
+                (action.options.settings || action.id !== Meta.KeyBindingAction.NONE ||
+                    reservedDisplacedActions.has(action)));
+            reloadActions.forEach(disableAction);
+            disableReservedPrefixes();
+            enableReservedPrefixes();
+            for (const action of reloadActions) {
+                enableAction(action);
+                if (action.options.settings || action.id !== Meta.KeyBindingAction.NONE)
+                    reservedDisplacedActions.delete(action);
+                else
+                    reservedDisplacedActions.add(action);
+            }
+        }
         enableChords();
         return GLib.SOURCE_REMOVE;
     });
@@ -98,13 +129,19 @@ function enableChords() {
 
     for (const chord of Settings.getChordKeybindings(chordSettings)) {
         const action = nameMap[chord.action];
-        if (!action)
+        if (!action || action.options.reservedPrefix)
             continue;
 
         const prefixCombo = Settings.keystrToKeycombo(chord.prefix);
         const keyCombo = chordEventCombo(chord.key);
         if (prefixCombo === '0|0' || !keyCombo)
             continue;
+        if (reservedPrefixCombos.has(prefixCombo)) {
+            console.warn(
+                `Ignoring chord ${chord.prefix}, ${chord.key} for ${chord.action}; ` +
+                'the prefix is reserved for keyed scratch layers');
+            continue;
+        }
 
         let prefix = configuredPrefixes.get(prefixCombo);
         if (!prefix) {
@@ -143,6 +180,47 @@ function disableChords() {
     for (const actionId of chordPrefixes.keys())
         display.ungrab_accelerator(actionId);
     chordPrefixes.clear();
+}
+
+function enableReservedPrefixes() {
+    const configuredCombos = new Map();
+    for (const action of actions.filter(candidate => candidate.options.reservedPrefix)) {
+        for (const keystr of keybindSettings.get_strv(action.name)) {
+            const keycombo = Settings.keystrToKeycombo(keystr);
+            if (keycombo === '0|0')
+                continue;
+            if (configuredCombos.has(keycombo)) {
+                console.warn(
+                    `Ignoring duplicate keyed scratch prefix ${keystr} for ${action.name}; ` +
+                    `already assigned to ${configuredCombos.get(keycombo)}`);
+                continue;
+            }
+            configuredCombos.set(keycombo, action.name);
+            reservedPrefixCombos.add(keycombo);
+
+            const actionId = Utils.grab_accelerator(keystr);
+            if (actionId === Meta.KeyBindingAction.NONE) {
+                console.warn(`Could not enable keyed scratch prefix ${keystr}`);
+                continue;
+            }
+            const prefix = {
+                actionId,
+                action: action.name,
+                keystr,
+                mutterName: Meta.external_binding_name_for_action(actionId),
+            };
+            reservedPrefixes.set(actionId, prefix);
+            Main.wm.allowKeybinding(prefix.mutterName, Shell.ActionMode.NORMAL);
+        }
+    }
+}
+
+function disableReservedPrefixes() {
+    prepareForDisable();
+    for (const actionId of reservedPrefixes.keys())
+        display.ungrab_accelerator(actionId);
+    reservedPrefixes.clear();
+    reservedPrefixCombos.clear();
 }
 
 function chordEventCombo(keystr) {
@@ -233,15 +311,20 @@ class ChordDispatcher {
 
         const keysym = lowerKeysym(eventKeysym);
         if (keysym !== Clutter.KEY_Escape) {
-            const combo = `${keysym}|${event.get_state() & chordModifierMask()}`;
-            this._match = this._prefix.actions.get(combo);
+            if (this._prefix.resolve) {
+                this._match = this._prefix.resolve(keysym);
+            } else {
+                const combo = `${keysym}|${event.get_state() & chordModifierMask()}`;
+                this._match = this._prefix.actions.get(combo);
+            }
         }
+        this._finishKeycode = event.get_key_code();
         this._finishOnRelease = true;
         return Clutter.EVENT_STOP;
     }
 
-    _onKeyRelease() {
-        if (!this._finishOnRelease)
+    _onKeyRelease(_actor, event) {
+        if (!this._finishOnRelease || event.get_key_code() !== this._finishKeycode)
             return Clutter.EVENT_STOP;
 
         const match = this._match;
@@ -249,7 +332,10 @@ class ChordDispatcher {
         if (match) {
             const sourceId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
                 pendingChordActions.delete(sourceId);
-                activateChordAction(match.action, match.keystr);
+                if (match.callback)
+                    match.callback();
+                else
+                    activateChordAction(match.action, match.keystr);
                 return GLib.SOURCE_REMOVE;
             });
             pendingChordActions.add(sourceId);
@@ -480,6 +566,16 @@ export function setupActions(settings) {
         Scratch.toggle,
         Meta.KeyBindingFlags.PER_WINDOW);
 
+    registerAction('toggle-keyed-scratch-layer', null,
+        { settings, reservedPrefix: 'toggle' });
+
+    registerAction('toggle-keyed-scratch', null,
+        {
+            settings,
+            reservedPrefix: 'attach',
+            mutterFlags: Meta.KeyBindingFlags.PER_WINDOW,
+        });
+
     registerPaperAction("activate-window-under-cursor",
         Tiling.activateWindowUnderCursor);
 
@@ -679,9 +775,11 @@ export function bindkey(keystr, actionName = null, handler = null, options = {})
         let boundAction = keycomboMap[keycombo];
         if (boundAction && boundAction !== action) {
             console.debug("Rebinding", keystr, "to", actionName, "from", boundAction?.name);
+            reservedDisplacedActions.delete(boundAction);
             disableAction(boundAction);
         }
 
+        reservedDisplacedActions.delete(action);
         disableAction(action);
 
         action.handler = handler;
@@ -692,6 +790,8 @@ export function bindkey(keystr, actionName = null, handler = null, options = {})
     action.keycombo = keycombo;
 
     if (enableAction(action) === Meta.KeyBindingAction.NONE) {
+        if (reservedPrefixCombos.has(keycombo))
+            reservedDisplacedActions.add(action);
         // Keybinding failed: try to supply a useful error message
         let message;
         let boundAction = keycomboMap[keycombo];
@@ -723,15 +823,18 @@ export function bindkey(keystr, actionName = null, handler = null, options = {})
 }
 
 export function unbindkey(actionIdOrKeystr) {
-    let actionId;
+    let action;
     if (typeof  actionIdOrKeystr === "string") {
-        const action = keycomboMap[Settings.keystrToKeycombo(actionIdOrKeystr)];
-        actionId = action && action.id;
+        const keycombo = Settings.keystrToKeycombo(actionIdOrKeystr);
+        action = keycomboMap[keycombo] ??
+            actions.find(candidate => candidate.keycombo === keycombo &&
+                reservedDisplacedActions.has(candidate));
     } else {
-        actionId = actionIdOrKeystr;
+        action = actionIdMap[actionIdOrKeystr];
     }
 
-    disableAction(actionIdMap[actionId]);
+    reservedDisplacedActions.delete(action);
+    disableAction(action);
 }
 
 export function devirtualizeMask(gdkVirtualMask) {
@@ -779,7 +882,8 @@ export function getBoundActionId(keystr) {
 }
 
 export function handleAccelerator(display, actionId, _deviceId, _timestamp) {
-    const prefix = chordPrefixes.get(actionId);
+    const reserved = reservedPrefixes.get(actionId);
+    const prefix = reserved ? keyedScratchPrefix(reserved) : chordPrefixes.get(actionId);
     if (prefix) {
         activeChord?.destroy();
         const dispatcher = new ChordDispatcher(prefix);
@@ -794,6 +898,27 @@ export function handleAccelerator(display, actionId, _deviceId, _timestamp) {
             actionId, action.name);
         action.keyHandler(display, display.focus_window);
     }
+}
+
+function keyedScratchPrefix(prefix) {
+    const metaWindow = display.focus_window;
+    return {
+        keystr: prefix.keystr,
+        resolve(keysym) {
+            const codepoint = Clutter.keysym_to_unicode(keysym);
+            if (!codepoint)
+                return null;
+            const layer = String.fromCodePoint(codepoint).toLowerCase();
+            if (!/^[a-z0-9]$/.test(layer))
+                return null;
+
+            if (prefix.action === 'toggle-keyed-scratch-layer')
+                return { callback: () => Scratch.toggleLayer(layer) };
+            if (!metaWindow)
+                return null;
+            return { callback: () => Scratch.toggleInLayer(metaWindow, layer) };
+        },
+    };
 }
 
 export function disableAction(action) {

@@ -11,6 +11,10 @@ const _ = s => s;
 
 const KEYBINDINGS_KEY = 'org.gnome.shell.extensions.paperwm.keybindings';
 const CHORD_TIMEOUT_MS = 2000;
+const nonChordActions = new Set([
+    'toggle-keyed-scratch-layer',
+    'toggle-keyed-scratch',
+]);
 
 const sections = {
     windows: 'Windows',
@@ -127,6 +131,8 @@ const actions = {
         'toggle-scratch-layer',
         'toggle-scratch',
         'toggle-scratch-window',
+        'toggle-keyed-scratch-layer',
+        'toggle-keyed-scratch',
     ],
 };
 
@@ -419,7 +425,8 @@ const Keybinding = GObject.registerClass({
 
     get modified() {
         return this._settings.get_user_value(this.action) !== null ||
-            Settings.getChordKeybindings(this._chordSettings).some(c => c.action === this.action);
+            !nonChordActions.has(this.action) &&
+                Settings.getChordKeybindings(this._chordSettings).some(c => c.action === this.action);
     }
 
     get enabled() {
@@ -510,7 +517,9 @@ const Keybinding = GObject.registerClass({
             })
             .map(([, keyval, mods]) => new Combo({ keyval, mods }, this.acceleratorParse));
 
-        const chords = Settings.getChordKeybindings(this._chordSettings)
+        const chords = (nonChordActions.has(this.action)
+            ? []
+            : Settings.getChordKeybindings(this._chordSettings))
             .filter(chord => chord.action === this.action)
             .map(chord => {
                 const prefix = this.acceleratorParse.accelerator_parse(
@@ -933,8 +942,12 @@ const ComboRow = GObject.registerClass({
         const combo = new Combo({ keycode, keyval: keyvalLower, mods: modmask },
             this.acceleratorParse);
         if (!this._firstCombo) {
-            if (isValidBinding(combo))
-                this._waitForSecondStroke(combo);
+            if (isValidBinding(combo)) {
+                if (nonChordActions.has(this.keybinding.action))
+                    this._commitCombo(combo);
+                else
+                    this._waitForSecondStroke(combo);
+            }
         } else {
             this._commitSecondStroke(combo);
         }

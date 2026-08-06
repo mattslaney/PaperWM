@@ -12,6 +12,10 @@ import { AcceleratorParse } from './acceleratorparse.js';
 const KEYBINDINGS_KEY = 'org.gnome.shell.extensions.paperwm.keybindings';
 const RESTORE_KEYBINDS_KEY = 'restore-keybinds';
 export const CHORD_KEYBINDINGS_KEY = 'chord-keybindings';
+const NON_CHORD_ACTIONS = new Set([
+    'toggle-keyed-scratch-layer',
+    'toggle-keyed-scratch',
+]);
 
 // This is the value mutter uses for the keyvalue of above_tab
 const META_KEY_ABOVE_TAB = 0x2f7259c9;
@@ -205,6 +209,8 @@ export function setChordKeybindings(chords, settings = gsettings) {
 function generateChordKeycomboMap(settings) {
     let map = {};
     for (const chord of getChordKeybindings(settings)) {
+        if (NON_CHORD_ACTIONS.has(chord.action))
+            continue;
         const combo = keystrToKeycombo(chord.prefix);
         if (combo === '0|0')
             continue;
