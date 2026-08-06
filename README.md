@@ -204,13 +204,13 @@ There's a single scrollable tiling per workspace. Adding another monitor simply 
 Scratch layers are an escape hatch to a familiar floating layout. They are intended to store globally useful windows such as chat applications, browsers, and terminals. Each layer is identified by a letter or number selected when assigning or directly toggling it. Layer `0` is used for windows placed in scratch automatically or through a Boolean window property rule.
 When a scratch layer is active it floats above the tiled windows; when hidden its windows are minimized. Layers toggle independently, so more than one layer can be visible at once.
 
-Pressing <kbd>Super</kbd><kbd>Escape</kbd> toggles the most recently used scratch layer. Every window assigned to that layer is shown or hidden together. Follow it promptly with <kbd>Tab</kbd> and a layer key to switch exclusively to that layer, hiding other visible scratch layers.
+Pressing <kbd>Super</kbd><kbd>Escape</kbd> toggles the most recently used scratch layer. Every window assigned to that layer is shown or hidden together.
 Activating windows in the scratch layer is done using <kbd>Super</kbd><kbd>Tab</kbd>, the floating windows having priority in the list while active.
 When the tiling is active <kbd>Super</kbd><kbd>Shift</kbd><kbd>Tab</kbd> selects the most recently used scratch window.
 
 <kbd>Super</kbd><kbd>Ctrl</kbd><kbd>Escape</kbd> immediately tiles the focused scratch window. When a tiled window is focused, follow the shortcut with a layer key to move it into that scratch layer. This functionality can also be accessed for layer `0` through the window context menu (<kbd>Alt</kbd><kbd>Space</kbd>).
 
-The <kbd>Tab</kbd> continuation and layer-key chords time out after two seconds and can be cancelled with <kbd>Escape</kbd>. Tab may be pressed while <kbd>Super</kbd> is still held. A hint showing occupied layers is enabled by default and can be disabled from PaperWM's General settings.
+Layer-key chords time out after two seconds and can be cancelled with <kbd>Escape</kbd>. A hint showing occupied layers is enabled by default and can be disabled from PaperWM's General settings.
 
 Applications can be assigned to a layer automatically from the `Winprops` settings tab by entering a scratch layer key for their window rule.
 
@@ -219,7 +219,6 @@ Applications can be assigned to a layer automatically from the `Winprops` settin
 | <kbd>Shift</kbd><kbd>Super</kbd><kbd>Escape</kbd>, then layer key                                 | Toggle all windows in a scratch layer |
 | <kbd>Ctrl</kbd><kbd>Super</kbd><kbd>Escape</kbd>, optionally followed by a layer key               | Detach a scratch window, or attach a tiled window to a layer |
 | <kbd>Super</kbd><kbd>Escape</kbd>                                                                  | Toggle the most recently used scratch layer |
-| <kbd>Super</kbd><kbd>Escape</kbd>, <kbd>Tab</kbd>, then layer key                                  | Switch exclusively to a scratch layer |
 
 ## Touchpad Gestures  ###
 

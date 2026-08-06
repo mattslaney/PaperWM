@@ -162,7 +162,7 @@
 
     <key type="as" name="toggle-scratch-window">
       <default><![CDATA[['<Super>Escape']]]></default>
-      <summary>Toggle the recent scratch layer; press Tab and a layer key to switch layers</summary>
+      <summary>Toggle the most recently used scratch layer</summary>
     </key>
 
     <key type="as" name="toggle-scratch-layer">
