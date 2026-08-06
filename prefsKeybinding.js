@@ -270,19 +270,11 @@ const Combo = GObject.registerClass({
     }
 
     get keycode() {
-        if (this.disabled) {
-            return 0;
-        } else if (!this._keycode) {
-            let [ok, key, mask] = this.acceleratorParse.accelerator_parse(this.keystr);
+        return this._keycode || 0;
+    }
 
-            if (ok && key.length) {
-                return key;
-            } else {
-                return 0;
-            }
-        } else {
-            return this._keycode;
-        }
+    set keycode(value) {
+        this._keycode = value;
     }
 
     get keystr() {
