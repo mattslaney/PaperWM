@@ -322,6 +322,8 @@ class SettingsWidget {
             }
         });
 
+        booleanStateChanged('show-scratch-chord-hint');
+
         booleanStateChanged('show-window-position-bar');
 
         const enableGnomePill = this.builder.get_object('use-gnome-pill');

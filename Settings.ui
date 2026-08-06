@@ -213,6 +213,43 @@
                         <child>
                           <object class="GtkGrid">
                             <property name="focusable">False</property>
+                            <property name="margin_start">12</property>
+                            <property name="margin_end">12</property>
+                            <property name="margin_top">6</property>
+                            <property name="margin_bottom">6</property>
+                            <property name="column_spacing">32</property>
+                            <child>
+                              <object class="GtkLabel">
+                                <property name="focusable">False</property>
+                                <property name="hexpand">1</property>
+                                <property name="label" translatable="yes">Show scratch layer key hint</property>
+                                <property name="tooltip_text" translatable="yes">Show occupied layers while waiting for the second key of a scratch shortcut</property>
+                                <property name="xalign">0</property>
+                                <layout>
+                                  <property name="column">0</property>
+                                  <property name="row">0</property>
+                                </layout>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkSwitch" id="show-scratch-chord-hint">
+                                <layout>
+                                  <property name="column">1</property>
+                                  <property name="row">0</property>
+                                </layout>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkListBoxRow">
+                        <property name="activatable">False</property>
+                        <property name="focusable">False</property>
+                        <child>
+                          <object class="GtkGrid">
+                            <property name="focusable">False</property>
                             <property name="tooltip_text" translatable="yes">Sets default focus mode used in workspaces</property>
                             <property name="margin_start">12</property>
                             <property name="margin_end">12</property>

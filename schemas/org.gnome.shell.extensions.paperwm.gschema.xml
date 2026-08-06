@@ -162,17 +162,17 @@
 
     <key type="as" name="toggle-scratch-window">
       <default><![CDATA[['<Super>Escape']]]></default>
-      <summary>Toggle the most recent scratch window</summary>
+      <summary>Choose a scratch layer and toggle its most recent window</summary>
     </key>
 
     <key type="as" name="toggle-scratch-layer">
         <default><![CDATA[['<Super><Shift>Escape']]]></default>
-        <summary>Toggles the floating scratch layer</summary>
+      <summary>Choose and toggle a floating scratch layer</summary>
     </key>
 
     <key type="as" name="toggle-scratch">
         <default><![CDATA[['<Super><Ctrl>Escape']]]></default>
-        <summary>Attach/detach the active window into the scratch layer</summary>
+      <summary>Choose a scratch layer for the active window</summary>
     </key>
 
     <key type="as" name="take-window">
@@ -610,6 +610,11 @@
     <key type="b" name="disable-scratch-in-overview">
         <default>false</default>
         <summary>Don't show scratch windows in the overview</summary>
+    </key>
+
+    <key type="b" name="show-scratch-chord-hint">
+        <default>true</default>
+        <summary>Show a hint when waiting for a scratch layer key</summary>
     </key>
 
     <key type="ad" name="swipe-sensitivity">
