@@ -5,10 +5,12 @@ import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk';
 
 import { AcceleratorParse } from './acceleratorparse.js';
+import * as Settings from './settings.js';
 
 const _ = s => s;
 
 const KEYBINDINGS_KEY = 'org.gnome.shell.extensions.paperwm.keybindings';
+const CHORD_TIMEOUT_MS = 2000;
 
 const sections = {
     windows: 'Windows',
@@ -233,6 +235,33 @@ const Combo = GObject.registerClass({
             GObject.ParamFlags.READWRITE | GObject.ParamFlags.CONSTRUCT_ONLY,
             false
         ),
+        keycode2: GObject.ParamSpec.uint(
+            'keycode2',
+            'Second keycode',
+            'Second key code',
+            GObject.ParamFlags.READWRITE | GObject.ParamFlags.CONSTRUCT_ONLY,
+            0,
+            GLib.MAXUINT32,
+            0
+        ),
+        keyval2: GObject.ParamSpec.uint(
+            'keyval2',
+            'Second keyval',
+            'Second key value',
+            GObject.ParamFlags.READWRITE | GObject.ParamFlags.CONSTRUCT_ONLY,
+            0,
+            GLib.MAXUINT32,
+            0
+        ),
+        mods2: GObject.ParamSpec.uint(
+            'mods2',
+            'Second modifiers',
+            'Second key modifiers',
+            GObject.ParamFlags.READWRITE | GObject.ParamFlags.CONSTRUCT_ONLY,
+            0,
+            GLib.MAXUINT32,
+            0
+        ),
     },
 }, class Combo extends GObject.Object {
     _init(params, acceleratorParse) {
@@ -266,12 +295,27 @@ const Combo = GObject.registerClass({
     get label() {
         if (this.disabled)
             return _('Disabled');
-        else
-            return Gtk.accelerator_get_label(this.keyval, this.mods);
+        const first = Gtk.accelerator_get_label(this.keyval, this.mods);
+        if (!this.chord)
+            return first;
+        const second = Gtk.accelerator_get_label(this.keyval2, this.mods2);
+        return `${first}, ${second}`;
     }
 
     get disabled() {
         return !this.keyval && !this.mods;
+    }
+
+    get chord() {
+        return Boolean(this.keyval2 || this.mods2);
+    }
+
+    get secondKeystr() {
+        return this.chord ? Gtk.accelerator_name(this.keyval2, this.mods2) : null;
+    }
+
+    get id() {
+        return this.chord ? `${this.keystr},${this.secondKeystr}` : this.keystr;
     }
 
     toString() {
@@ -337,9 +381,10 @@ const Keybinding = GObject.registerClass({
         changed: {},
     },
 }, class Keybinding extends GObject.Object {
-    _init(params = {}, settings, acceleratorParse) {
+    _init(params = {}, settings, chordSettings, acceleratorParse) {
         super._init(params);
         this._settings = settings;
+        this._chordSettings = chordSettings;
         this.acceleratorParse = acceleratorParse;
         this._description = _(this._settings.settings_schema.get_key(this.action).get_summary());
 
@@ -381,7 +426,8 @@ const Keybinding = GObject.registerClass({
     }
 
     get modified() {
-        return this._settings.get_user_value(this.action) !== null;
+        return this._settings.get_user_value(this.action) !== null ||
+            Settings.getChordKeybindings(this._chordSettings).some(c => c.action === this.action);
     }
 
     get enabled() {
@@ -405,9 +451,8 @@ const Keybinding = GObject.registerClass({
         if (found)
             return;
         this.combos.append(combo);
-        if (!combo.disabled) {
-            this._store();
-        }
+        if (!combo.disabled)
+            this._store({ direct: !combo.chord, chords: combo.chord });
     }
 
     remove(combo) {
@@ -417,7 +462,8 @@ const Keybinding = GObject.registerClass({
         this.combos.remove(pos);
         if (this.combos.get_n_items() === 0)
             this.combos.append(new Combo({}, this.acceleratorParse));
-        this._store();
+        if (!combo.placeholder)
+            this._store({ direct: !combo.chord, chords: combo.chord });
     }
 
     replace(oldCombo, newCombo) {
@@ -430,21 +476,29 @@ const Keybinding = GObject.registerClass({
         } else {
             this.combos.append(newCombo);
         }
-        this._store();
+        const direct = !oldCombo.disabled && !oldCombo.chord || !newCombo.chord;
+        const chords = oldCombo.chord || newCombo.chord;
+        this._store({
+            direct,
+            chords,
+            chordsFirst: oldCombo.chord && !newCombo.chord,
+        });
     }
 
     disable() {
+        this._storeChords([]);
         this._settings.set_strv(this.action, ['']);
     }
 
     reset() {
+        this._storeChords([]);
         if (this._settings.get_user_value(this.action)) {
             this._settings.reset(this.action);
         }
     }
 
     find(combo) {
-        const pos = [...this.combos].findIndex(c => c.keystr === combo.keystr);
+        const pos = [...this.combos].findIndex(c => c.id === combo.id);
         if (pos === -1) {
             return [false];
         } else {
@@ -464,21 +518,84 @@ const Keybinding = GObject.registerClass({
             })
             .map(([, keyval, mods]) => new Combo({ keyval, mods }, this.acceleratorParse));
 
+        const chords = Settings.getChordKeybindings(this._chordSettings)
+            .filter(chord => chord.action === this.action)
+            .map(chord => {
+                const prefix = this.acceleratorParse.accelerator_parse(
+                    this._translateAboveTab(chord.prefix));
+                const key = this.acceleratorParse.accelerator_parse(
+                    this._translateAboveTab(chord.key));
+                if (!prefix[0] || !key[0])
+                    return null;
+                return new Combo({
+                    keyval: prefix[1],
+                    mods: prefix[2],
+                    keyval2: key[1],
+                    mods2: key[2],
+                }, this.acceleratorParse);
+            })
+            .filter(Boolean);
+        combos.push(...chords);
+
         if (combos.length === 0) {
             combos.push(new Combo({}, this.acceleratorParse));
         }
 
         this.combos.splice(0, this.combos.get_n_items(), combos);
+        this.notify('modified');
+        this.notify('enabled');
     }
 
-    _store() {
-        let filtered = [...this.combos]
-            .filter(c => !isEmptyBinding(c))
+    _store({ direct, chords, chordsFirst = false }) {
+        const combos = [...this.combos];
+        const directKeystrs = combos
+            .filter(c => !isEmptyBinding(c) && !c.chord)
             .map(c => c.keystr);
-        if (filtered.length === 0) {
-            filtered = [''];
+        const chordValues = combos
+            .filter(c => !isEmptyBinding(c) && c.chord)
+            .map(c => ({ action: this.action, prefix: c.keystr, key: c.secondKeystr }));
+        const storeDirect = () => this._storeDirect(directKeystrs);
+        const storeChords = () => this._storeChords(chordValues);
+
+        if (chordsFirst) {
+            if (chords)
+                storeChords();
+            if (direct)
+                storeDirect();
+        } else {
+            if (direct)
+                storeDirect();
+            if (chords)
+                storeChords();
         }
-        this._settings.set_strv(this.action, filtered);
+    }
+
+    _storeDirect(keystrs) {
+        const value = keystrs.length > 0 ? keystrs : [''];
+        const defaults = this._settings.get_default_value(this.action).deep_unpack();
+        if (value.length === defaults.length && value.every((key, i) => key === defaults[i]))
+            this._settings.reset(this.action);
+        else
+            this._settings.set_strv(this.action, value);
+    }
+
+    _storeChords(chords) {
+        const existing = Settings.getChordKeybindings(this._chordSettings);
+        const updated = [];
+        let inserted = false;
+        for (const chord of existing) {
+            if (chord.action === this.action) {
+                if (!inserted) {
+                    updated.push(...chords);
+                    inserted = true;
+                }
+            } else {
+                updated.push(chord);
+            }
+        }
+        if (!inserted)
+            updated.push(...chords);
+        Settings.setChordKeybindings(updated, this._chordSettings);
     }
 
     _translateAboveTab(keystr) {
@@ -521,8 +638,14 @@ export const KeybindingsModel = GObject.registerClass({
         this._actionToBinding = new Map();
     }
 
-    init(settings) {
+    init(settings, chordSettings) {
         this._settings = settings;
+        this._chordSettings = chordSettings;
+        this._chordSnapshot = chordSnapshot(chordSettings);
+        this._chordSettings.connect(
+            `changed::${Settings.CHORD_KEYBINDINGS_KEY}`,
+            () => this._onChordsChanged()
+        );
         this.load();
     }
 
@@ -540,7 +663,6 @@ export const KeybindingsModel = GObject.registerClass({
 
     get collisions() {
         if (this._collisions === undefined) {
-            this._collisions = new Map();
             this._updateCollisions();
         }
         return this._collisions;
@@ -561,7 +683,7 @@ export const KeybindingsModel = GObject.registerClass({
                 const binding = new Keybinding({
                     section,
                     action,
-                }, this._settings, this.acceleratorParse);
+                }, this._settings, this._chordSettings, this.acceleratorParse);
                 bindings.push(binding);
                 this._actionToBinding.set(action, binding);
             }
@@ -569,41 +691,46 @@ export const KeybindingsModel = GObject.registerClass({
         this._model.splice(0, this._model.get_n_items(), bindings);
     }
 
-    _updateCollisions(position, removed, added) {
-        let map = new Map();
+    _onChordsChanged() {
+        const snapshot = chordSnapshot(this._chordSettings);
+        const actionNames = new Set([...this._chordSnapshot.keys(), ...snapshot.keys()]);
+        for (const action of actionNames) {
+            if (this._chordSnapshot.get(action) !== snapshot.get(action))
+                this.getKeybinding(action)?._load();
+        }
+        this._chordSnapshot = snapshot;
+    }
+
+    _updateCollisions() {
+        const shortcuts = [];
         for (const binding of this._model) {
             for (const combo of binding.combos) {
                 if (combo.disabled)
                     continue;
-                map.set(combo.keystr, (map.get(combo.keystr) || new Set()).add(binding.action));
+                shortcuts.push({ binding, combo });
             }
         }
-        let changed = new Set();
-        for (const [keystr, actions] of map.entries()) {
-            if (actions.size > 1) {
-                if (!this.collisions.has(keystr)) {
-                    for (const action of actions) {
-                        changed.add(action);
-                    }
-                } else {
-                    let old = this.collisions.get(keystr);
-                    for (const action of symmetricDifference(old, actions)) {
-                        changed.add(action);
-                    }
-                }
-                this.collisions.set(keystr, actions);
-            } else {
-                for (const action of actions) {
-                    changed.add(action);
-                }
-                this.collisions.delete(keystr);
+
+        const collisions = new Map();
+        const addCollision = (id, action) => {
+            if (!collisions.has(id))
+                collisions.set(id, new Set());
+            collisions.get(id).add(action);
+        };
+
+        for (let i = 0; i < shortcuts.length; i++) {
+            for (let j = i + 1; j < shortcuts.length; j++) {
+                const left = shortcuts[i];
+                const right = shortcuts[j];
+                if (!combosConflict(left.combo, right.combo))
+                    continue;
+                addCollision(left.combo.id, right.binding.action);
+                addCollision(right.combo.id, left.binding.action);
             }
         }
-        if (changed.size > 0) {
-            for (const action of changed) {
-                this.emit(`collisions-changed::${action}`);
-            }
-        }
+        this._collisions = collisions;
+        for (const binding of this._model)
+            this.emit(`collisions-changed::${binding.action}`);
     }
 });
 
@@ -616,6 +743,8 @@ const ComboRow = GObject.registerClass({
         'placeholderPage',
         'editPage',
         'shortcutLabel',
+        'chordSeparator',
+        'secondShortcutLabel',
         'deleteButton',
         'conflictButton',
         'conflictList',
@@ -655,7 +784,7 @@ const ComboRow = GObject.registerClass({
         let controller;
         controller = Gtk.EventControllerKey.new();
         controller.connect('key-pressed', (controller, keyval, keycode, state) => {
-            this._onKeyPressed(controller, keyval, keycode, state);
+            return this._onKeyPressed(controller, keyval, keycode, state);
         });
         this.add_controller(controller);
 
@@ -679,7 +808,7 @@ const ComboRow = GObject.registerClass({
     }
 
     set combo(value) {
-        if (value && this._combo && this._combo.keystr === value.keystr)
+        if (value && this._combo && this._combo.id === value.id)
             return;
         this._combo = value;
         this.notify('combo');
@@ -696,6 +825,12 @@ const ComboRow = GObject.registerClass({
         if (this.editing === value)
             return;
         this._editing = value;
+        if (value) {
+            this._firstCombo = null;
+        } else {
+            this._clearRecordTimeout();
+            this._firstCombo = null;
+        }
         this.notify('editing');
         this._updateState();
     }
@@ -710,7 +845,9 @@ const ComboRow = GObject.registerClass({
 
     _createConflictRow(binding) {
         return new Gtk.Label({
-            label: binding.description,
+            label: binding === this.keybinding
+                ? _('Another shortcut for this action')
+                : binding.description,
         });
     }
 
@@ -720,16 +857,29 @@ const ComboRow = GObject.registerClass({
     }
 
     _grabKeyboard() {
+        if (this._shortcutsInhibited)
+            return;
         this.get_root().get_surface().inhibit_system_shortcuts(null);
+        this._shortcutsInhibited = true;
     }
 
     _ungrabKeyboard() {
+        if (!this._shortcutsInhibited)
+            return;
         // using optionals here since may have already been ungrabbed
         this.get_root()?.get_surface()?.restore_system_shortcuts();
+        this._shortcutsInhibited = false;
     }
 
     _onDeleteButtonClicked() {
         GLib.idle_add(0, () => this.keybinding.remove(this.combo));
+    }
+
+    _clearRecordTimeout() {
+        if (this._recordTimeoutId) {
+            GLib.source_remove(this._recordTimeoutId);
+            this._recordTimeoutId = null;
+        }
     }
 
     _onKeyPressed(controller, keyval, keycode, state) {
@@ -767,6 +917,9 @@ const ComboRow = GObject.registerClass({
         const event = controller.get_current_event();
         const isModifier = event.is_modifier();
 
+        if (isModifier)
+            return Gdk.EVENT_STOP;
+
         // Escape cancels
         if (!isModifier && modmask === 0 && keyvalLower === Gdk.KEY_Escape) {
             this.editing = false;
@@ -778,27 +931,74 @@ const ComboRow = GObject.registerClass({
 
         // Backspace deletes
         if (!isModifier && modmask === 0 && keyvalLower === Gdk.KEY_BackSpace) {
-            this._updateKeybinding(new Combo({}, this.acceleratorParse));
+            this._commitCombo(new Combo({}, this.acceleratorParse));
             return Gdk.EVENT_STOP;
         }
 
         // Remove CapsLock
         modmask &= ~Gdk.ModifierType.LOCK_MASK;
 
-        this._updateKeybinding(new Combo({ keycode, keyval: keyvalLower, mods: modmask },
-            this.acceleratorParse));
+        const combo = new Combo({ keycode, keyval: keyvalLower, mods: modmask },
+            this.acceleratorParse);
+        if (!this._firstCombo) {
+            if (isValidBinding(combo))
+                this._waitForSecondStroke(combo);
+        } else {
+            this._commitSecondStroke(combo);
+        }
 
         return Gdk.EVENT_STOP;
     }
 
-    _updateKeybinding(newCombo) {
-        let isValid = isValidBinding(newCombo);
-        let isEmpty = isEmptyBinding(newCombo);
+    _waitForSecondStroke(combo) {
+        this._firstCombo = combo;
+        const label = GLib.markup_escape_text(combo.label, -1);
+        this._editPage.label = _(`<b>${label}</b> entered. Press the second shortcut, or wait to use it alone`);
+        this._clearRecordTimeout();
+        this._recordTimeoutId = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            CHORD_TIMEOUT_MS,
+            () => {
+                this._recordTimeoutId = null;
+                if (this.editing && this._firstCombo === combo && this.get_root())
+                    this._commitCombo(combo);
+                return GLib.SOURCE_REMOVE;
+            }
+        );
+    }
 
+    vfunc_unroot() {
+        this._clearRecordTimeout();
+        this._firstCombo = null;
+        this._ungrabKeyboard();
+        super.vfunc_unroot();
+    }
+
+    _commitSecondStroke(second) {
+        if (isEmptyBinding(second))
+            return;
+        const first = this._firstCombo;
+        this._commitCombo(new Combo({
+            keycode: first.keycode,
+            keyval: first.keyval,
+            mods: first.mods,
+            keycode2: second.keycode,
+            keyval2: second.keyval,
+            mods2: second.mods,
+        }, this.acceleratorParse));
+    }
+
+    _commitCombo(newCombo) {
+        this._clearRecordTimeout();
+        const isEmpty = isEmptyBinding(newCombo);
         const oldCombo = this.combo;
-        if (isEmptyBinding(oldCombo) && isValid) {
+        if (isEmptyBinding(oldCombo) && !isEmpty) {
             this.editing = false;
-            this.keybinding.add(newCombo);
+            const [found] = this.keybinding.find(newCombo);
+            if (found)
+                this.keybinding.remove(oldCombo);
+            else
+                this.keybinding.replace(oldCombo, newCombo);
             return;
         }
 
@@ -808,10 +1008,8 @@ const ComboRow = GObject.registerClass({
             return;
         }
 
-        if (isValid) {
-            this.editing = false;
-            this.keybinding.replace(oldCombo, newCombo);
-        }
+        this.editing = false;
+        this.keybinding.replace(oldCombo, newCombo);
     }
 
     _updateState() {
@@ -822,6 +1020,7 @@ const ComboRow = GObject.registerClass({
         if (this.editing) {
             this.add_css_class('editing');
             this._stack.visible_child = this._editPage;
+            this._editPage.label = _('Enter keyboard shortcut, <b>Backspace</b> to delete or <b>Esc</b> to cancel');
             this.grab_focus();
             this._grabKeyboard();
         } else {
@@ -831,10 +1030,15 @@ const ComboRow = GObject.registerClass({
 
             if (this._combo && !this._combo.disabled) {
                 this._shortcutLabel.accelerator = this._combo.keystr;
+                this._chordSeparator.visible = this._combo.chord;
+                this._secondShortcutLabel.visible = this._combo.chord;
+                this._secondShortcutLabel.accelerator = this._combo.secondKeystr || '';
                 this._deleteButton.visible = true;
                 this._conflictButton.visible = this.collisions.length > 0;
             } else {
                 this._shortcutLabel.accelerator = '';
+                this._chordSeparator.visible = false;
+                this._secondShortcutLabel.visible = false;
                 this._deleteButton.visible = false;
             }
         }
@@ -893,18 +1097,20 @@ const KeybindingsRow = GObject.registerClass({
         this._actionGroup = new Gio.SimpleActionGroup();
         this.insert_action_group('keybinding', this._actionGroup);
 
-        let action;
-        action = new Gio.SimpleAction({
+        const resetAction = new Gio.SimpleAction({
             name: 'reset',
             enabled: this.keybinding.modified,
         });
-        action.connect('activate', () => this.keybinding.reset());
-        this._actionGroup.add_action(action);
+        resetAction.connect('activate', () => this.keybinding.reset());
+        this._actionGroup.add_action(resetAction);
+        this.keybinding.connect('notify::modified', binding => {
+            resetAction.enabled = binding.modified;
+        });
 
-        action = new Gio.SimpleAction({ name: 'add' });
-        action.connect('activate', () => this.keybinding.add(new Combo({ placeholder: true },
+        const addAction = new Gio.SimpleAction({ name: 'add' });
+        addAction.connect('activate', () => this.keybinding.add(new Combo({ placeholder: true },
             this.acceleratorParse)));
-        this._actionGroup.add_action(action);
+        this._actionGroup.add_action(addAction);
 
         const gesture = Gtk.GestureClick.new();
         gesture.set_button(Gdk.BUTTON_PRIMARY);
@@ -960,8 +1166,9 @@ const KeybindingsRow = GObject.registerClass({
             GLib.idle_add(0, () => { row.editing = true; });
         }
         this.connect('notify::collisions', () => {
-            row.collisions = this.collisions.get(combo.keystr) || [];
+            row.collisions = this.collisions.get(combo.id) || [];
         });
+        row.collisions = this.collisions.get(combo.id) || [];
         row.connect('collision-activated', (_, binding) => {
             this.emit('collision-activated', binding);
         });
@@ -972,13 +1179,12 @@ const KeybindingsRow = GObject.registerClass({
         const map = new Map();
         const collisions = this.keybindings.collisions;
         for (const combo of this.keybinding.combos) {
-            const actions = collisions.get(combo.keystr);
+            const actions = collisions.get(combo.id);
             if (!actions)
                 continue;
             map.set(
-                combo.keystr,
+                combo.id,
                 [...actions]
-                    .filter(a => a !== this.keybinding.action)
                     .map(a => this.keybindings.getKeybinding(a))
             );
         }
@@ -1025,6 +1231,7 @@ export const KeybindingsPane = GObject.registerClass({
 
     init(extension) {
         this._settings = extension.getSettings(KEYBINDINGS_KEY);
+        this._chordSettings = extension.getSettings();
         this.acceleratorParse = new AcceleratorParse();
         this._model = new KeybindingsModel({}, this.acceleratorParse);
 
@@ -1045,7 +1252,7 @@ export const KeybindingsPane = GObject.registerClass({
         this._expandedRow = null;
 
         // send settings to model (which processes and creates rows)
-        this._model.init(this._settings);
+        this._model.init(this._settings, this._chordSettings);
     }
 
     _createHeader(row, before) {
@@ -1123,14 +1330,22 @@ function aboveTabKeyvals() {
     return _aboveTabKeyvals;
 }
 
-function symmetricDifference(setA, setB) {
-    let _difference = new Set(setA);
-    for (let elem of setB) {
-        if (_difference.has(elem)) {
-            _difference.delete(elem);
-        } else {
-            _difference.add(elem);
-        }
+function combosConflict(left, right) {
+    if (!left.chord && !right.chord)
+        return left.keystr === right.keystr;
+    if (left.chord && right.chord)
+        return left.id === right.id;
+    const direct = left.chord ? right : left;
+    const chord = left.chord ? left : right;
+    return direct.keystr === chord.keystr;
+}
+
+function chordSnapshot(settings) {
+    const byAction = new Map();
+    for (const chord of Settings.getChordKeybindings(settings)) {
+        if (!byAction.has(chord.action))
+            byAction.set(chord.action, []);
+        byAction.get(chord.action).push(`${chord.prefix},${chord.key}`);
     }
-    return _difference;
+    return new Map([...byAction].map(([action, chords]) => [action, JSON.stringify(chords)]));
 }
