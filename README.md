@@ -201,20 +201,24 @@ There's a single scrollable tiling per workspace. Adding another monitor simply 
 
 ![The floating scratch layer, with the alt tab menu open](https://github.com/paperwm/media/blob/master/scratch.png)
 
-The scratch layer is an escape hatch to a familiar floating layout. This layer is intended to store windows that are globally useful like chat applications and in general serve as the kitchen sink.
-When the scratch layer is active it will float above the tiled windows, when hidden the windows will be minimized.
+Scratch layers are an escape hatch to a familiar floating layout. They are intended to store windows that are globally useful like chat applications and in general serve as the kitchen sink.
+When a scratch layer is active it floats above the tiled windows; when hidden its windows are minimized.
 
-Pressing <kbd>Super</kbd><kbd>Escape</kbd> toggles between showing and hiding the windows in the scratch layer.
+The existing scratch shortcuts continue to control the default scratch layer. Pressing <kbd>Super</kbd><kbd>Escape</kbd> toggles its most recent window.
 Activating windows in the scratch layer is done using <kbd>Super</kbd><kbd>Tab</kbd>, the floating windows having priority in the list while active.
 When the tiling is active <kbd>Super</kbd><kbd>Shift</kbd><kbd>Tab</kbd> selects the most recently used scratch window.
 
 <kbd>Super</kbd><kbd>Ctrl</kbd><kbd>Escape</kbd> will move a tiled window into the scratch layer or alternatively tile an already floating window. This functionality can also be accessed through the window context menu (<kbd>Alt</kbd><kbd>Space</kbd>).
+
+Additional scratch layers can be controlled with the disabled-by-default **Toggle a keyed scratch layer** and **Attach/detach the active window into a keyed scratch layer** shortcuts in PaperWM settings. Assigning <kbd>Super</kbd><kbd>S</kbd> to the first action, for example, lets <kbd>Super</kbd><kbd>S</kbd>, <kbd>C</kbd> toggle layer C. Layer keys are case-insensitive letters or digits. A keyed prefix is reserved for scratch layers, so direct shortcuts and ordinary chords using the same prefix are unavailable while it is configured.
 
 | `scratch` keybindings                                                                             | _Can be changed in PaperWM extension settings_ | 
 | ------                                                                                            | ------- |
 | <kbd>Shift</kbd><kbd>Super</kbd><kbd>Escape</kbd>                                                 | Toggles the floating scratch layer |
 | <kbd>Ctrl</kbd><kbd>Super</kbd><kbd>Escape</kbd>                                                  | Attach/detach active window into scratch layer |
 | <kbd>Super</kbd><kbd>Escape</kbd>                                                                 | Toggle the most recent scratch window |
+| User-assigned prefix, then layer key                                                               | Toggle a keyed scratch layer |
+| User-assigned prefix, then layer key                                                               | Attach/detach active window into a keyed scratch layer |
 
 ## Touchpad Gestures  ###
 
@@ -276,7 +280,7 @@ It's possible to set window properties using simple rules that will be applied w
 
 Property              | Input type                          | Input example | Description
 ----------------------|-------------------------------------|------------------|------------------
-`scratch_layer`       | Boolean                             | `true`, `false`  | if `true` window will be placed on the scratch layer.
+`scratch_layer`       | Boolean or one-character string     | `true`, `"c"`   | Places the window on the default layer when `true`, or on the keyed layer identified by a letter or digit.
 `preferredWidth`      | String value with `%` or `px` unit         | `"50%"`, `"450px"`    | resizes the window width to the preferred width when it's created. </br>_Note<sup>1</sup>: property not applicable to windows on scratch layer._
 
 Window properties can be added using the `Winprops` tab of the PaperWM extension settings:
