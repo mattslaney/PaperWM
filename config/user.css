@@ -52,6 +52,13 @@ DEFAULT STYLES ARE PROVIDED BELOW FOR REFERENCE:
     border-radius: 8px;
 }
 
+.scratch-chord-hint {
+    background-color: rgba(0, 0, 0, 0.9);
+    padding: 14px 18px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+
 .workspace-icon-button {
     -st-icon-style: symbolic;
     border: none;

@@ -56,6 +56,7 @@ export function enable(extension) {
         'edge-preview-timeout',
         'edge-preview-timeout-continual',
         'window-switcher-preview-scale',
+        'show-scratch-chord-hint',
         'winprops',
         'show-workspace-indicator',
         'show-window-position-bar',

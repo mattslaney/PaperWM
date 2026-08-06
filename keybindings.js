@@ -236,15 +236,17 @@ export function setupActions(settings) {
     registerMinimapAction("move-down",
         (_mw, space) => space.swap(Meta.MotionDirection.DOWN));
 
-    registerPaperAction("toggle-scratch-window",
-        Scratch.toggleScratchWindow);
+    registerAction("toggle-scratch-window",
+        Scratch.beginScratchWindowChord,
+        { settings });
 
-    registerPaperAction("toggle-scratch-layer",
-        Scratch.toggleScratch);
+    registerAction("toggle-scratch-layer",
+        Scratch.beginScratchLayerChord,
+        { settings });
 
-    registerPaperAction("toggle-scratch",
-        Scratch.toggle,
-        Meta.KeyBindingFlags.PER_WINDOW);
+    registerAction("toggle-scratch",
+        Scratch.beginScratchAttachChord,
+        { settings, mutterFlags: Meta.KeyBindingFlags.PER_WINDOW });
 
     registerPaperAction("activate-window-under-cursor",
         Tiling.activateWindowUnderCursor);

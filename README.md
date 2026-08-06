@@ -201,20 +201,22 @@ There's a single scrollable tiling per workspace. Adding another monitor simply 
 
 ![The floating scratch layer, with the alt tab menu open](https://github.com/paperwm/media/blob/master/scratch.png)
 
-The scratch layer is an escape hatch to a familiar floating layout. This layer is intended to store windows that are globally useful like chat applications and in general serve as the kitchen sink.
-When the scratch layer is active it will float above the tiled windows, when hidden the windows will be minimized.
+Scratch layers are an escape hatch to a familiar floating layout. They are intended to store globally useful windows such as chat applications, browsers, and terminals. Each layer is identified by a letter or number chosen as the second key of a scratch shortcut. Layer `0` is used for windows placed in scratch automatically or through a window property rule.
+When a scratch layer is active it floats above the tiled windows; when hidden its windows are minimized. Layers toggle independently, so more than one layer can be visible at once.
 
-Pressing <kbd>Super</kbd><kbd>Escape</kbd> toggles between showing and hiding the windows in the scratch layer.
+Pressing <kbd>Super</kbd><kbd>Escape</kbd> followed by a layer key toggles the most recently used window in that scratch layer. For example, <kbd>Super</kbd><kbd>Escape</kbd>, then <kbd>C</kbd> can show a chat layer.
 Activating windows in the scratch layer is done using <kbd>Super</kbd><kbd>Tab</kbd>, the floating windows having priority in the list while active.
 When the tiling is active <kbd>Super</kbd><kbd>Shift</kbd><kbd>Tab</kbd> selects the most recently used scratch window.
 
-<kbd>Super</kbd><kbd>Ctrl</kbd><kbd>Escape</kbd> will move a tiled window into the scratch layer or alternatively tile an already floating window. This functionality can also be accessed through the window context menu (<kbd>Alt</kbd><kbd>Space</kbd>).
+<kbd>Super</kbd><kbd>Ctrl</kbd><kbd>Escape</kbd> followed by a layer key moves a tiled window into that layer. Repeating the same chord tiles it again; choosing another key moves it to that scratch layer. This functionality can also be accessed for layer `0` through the window context menu (<kbd>Alt</kbd><kbd>Space</kbd>).
+
+Scratch chords time out after two seconds and can be cancelled with <kbd>Escape</kbd>. A hint showing occupied layers is enabled by default and can be disabled from PaperWM's General settings.
 
 | `scratch` keybindings                                                                             | _Can be changed in PaperWM extension settings_ | 
 | ------                                                                                            | ------- |
-| <kbd>Shift</kbd><kbd>Super</kbd><kbd>Escape</kbd>                                                 | Toggles the floating scratch layer |
-| <kbd>Ctrl</kbd><kbd>Super</kbd><kbd>Escape</kbd>                                                  | Attach/detach active window into scratch layer |
-| <kbd>Super</kbd><kbd>Escape</kbd>                                                                 | Toggle the most recent scratch window |
+| <kbd>Shift</kbd><kbd>Super</kbd><kbd>Escape</kbd>, then layer key                                 | Toggle all windows in a scratch layer |
+| <kbd>Ctrl</kbd><kbd>Super</kbd><kbd>Escape</kbd>, then layer key                                  | Attach/detach the active window in a scratch layer |
+| <kbd>Super</kbd><kbd>Escape</kbd>, then layer key                                                  | Toggle the most recent window in a scratch layer |
 
 ## Touchpad Gestures  ###
 
