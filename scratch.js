@@ -72,6 +72,7 @@ export function easeScratch(metaWindow, targetX, targetY, params = {}) {
 
 export function makeScratch(metaWindow, layer = null) {
     const currentLayer = getScratchLayer(metaWindow);
+    const requestedLayer = normalizeLayer(layer);
     let fromNonScratch = !currentLayer;
     let fromTiling = false;
     // Relevant when called while navigating. Use the position the user actually sees.
@@ -88,12 +89,15 @@ export function makeScratch(metaWindow, layer = null) {
         }
     }
 
-    metaWindow[scratchLayer] = normalizeLayer(layer) ?? currentLayer ?? DEFAULT_LAYER;
+    metaWindow[scratchLayer] = requestedLayer ?? currentLayer ?? DEFAULT_LAYER;
     metaWindow.make_above();
     metaWindow.stick();  // NB! Removes the window from the tiling (synchronously)
 
     if (!metaWindow.minimized)
         Tiling.showWindow(metaWindow);
+
+    if (requestedLayer !== null && !metaWindow.minimized)
+        revealScratchWindows(getScratchWindows(requestedLayer));
 
     if (fromTiling) {
         let f = metaWindow.get_frame_rect();
@@ -217,6 +221,12 @@ export function toggleScratchWindow() {
         show(true);
 }
 
+export function toggleRecentScratchLayer() {
+    const recentWindow = getScratchWindows()[0];
+    if (recentWindow)
+        toggleLayer(getScratchLayer(recentWindow));
+}
+
 export function show(top) {
     showScratchWindows(getScratchWindows(), top);
 }
@@ -233,17 +243,6 @@ function toggleLayer(layer) {
         showScratchWindows(windows);
 }
 
-function toggleWindowInLayer(layer) {
-    const metaWindow = getScratchWindows(layer)[0];
-    if (!metaWindow)
-        return;
-
-    if (!metaWindow.minimized && global.display.focus_window === metaWindow)
-        metaWindow.minimize();
-    else
-        showScratchWindows([metaWindow]);
-}
-
 function showScratchWindows(windows, top = false) {
     if (windows.length === 0) {
         return;
@@ -253,15 +252,19 @@ function showScratchWindows(windows, top = false) {
 
     Topbar.fixTopBar();
 
+    revealScratchWindows(windows);
+    windows[0].activate(global.get_current_time());
+
+    Tiling.focusMonitor()?.clickOverlay?.hide();
+}
+
+function revealScratchWindows(windows) {
     windows.slice().reverse()
         .map(function(meta_window) {
             meta_window.unminimize();
             meta_window.make_above();
             meta_window.get_compositor_private().show();
         });
-    windows[0].activate(global.get_current_time());
-
-    Tiling.focusMonitor()?.clickOverlay?.hide();
 }
 
 function hideScratchWindows(windows) {
@@ -290,10 +293,6 @@ export function showWindows() {
     ws.forEach(Tiling.showWindow);
 }
 
-export function beginScratchWindowChord() {
-    beginChord('window');
-}
-
 export function beginScratchLayerChord() {
     beginChord('layer');
 }
@@ -305,7 +304,7 @@ export function beginScratchAttachChord(metaWindow) {
 function normalizeLayer(layer) {
     if (layer === null || layer === undefined)
         return null;
-    return String(layer).toLowerCase();
+    return String(layer).trim().toLowerCase();
 }
 
 function beginChord(operation, metaWindow = null) {
@@ -370,7 +369,6 @@ class ScratchChord {
 
         if (Settings.prefs.show_scratch_chord_hint) {
             const titles = {
-                window: 'Toggle recent scratch window',
                 layer: 'Toggle scratch layer',
                 attach: 'Attach/detach focused window',
             };
@@ -445,9 +443,7 @@ class ScratchChord {
         this.close();
         Utils.timeout_remove(operationIdleId);
         operationIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-            if (operation === 'window')
-                toggleWindowInLayer(layer);
-            else if (operation === 'layer')
+            if (operation === 'layer')
                 toggleLayer(layer);
             else
                 toggleInLayer(metaWindow, layer);

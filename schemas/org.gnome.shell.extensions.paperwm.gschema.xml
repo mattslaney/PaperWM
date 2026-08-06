@@ -157,7 +157,7 @@
 
     <key type="as" name="toggle-scratch-window">
       <default><![CDATA[['<Super>Escape']]]></default>
-      <summary>Choose a scratch layer and toggle its most recent window</summary>
+      <summary>Toggle the most recently used scratch layer</summary>
     </key>
 
     <key type="as" name="toggle-scratch-layer">
