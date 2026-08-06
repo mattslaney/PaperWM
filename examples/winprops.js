@@ -9,7 +9,7 @@ defwinprop({
 defwinprop({
     wm_class: "Riot",
     oneshot: true, // Allow reattaching
-    scratch_layer: true,
+    scratch_layer: "c",
 });
 
 // Fix rofi in normal window mode (eg. in Wayland)

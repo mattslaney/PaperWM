@@ -356,7 +356,7 @@ export function restoreConflicts() {
 
    defwinprop({
      wm_class: "Riot",
-     scratch_layer: true
+     scratch_layer: "c"
    })
 */
 export let winprops = [];

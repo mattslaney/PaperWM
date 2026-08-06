@@ -201,10 +201,10 @@ There's a single scrollable tiling per workspace. Adding another monitor simply 
 
 ![The floating scratch layer, with the alt tab menu open](https://github.com/paperwm/media/blob/master/scratch.png)
 
-Scratch layers are an escape hatch to a familiar floating layout. They are intended to store globally useful windows such as chat applications, browsers, and terminals. Each layer is identified by a letter or number chosen as the second key of a scratch shortcut. Layer `0` is used for windows placed in scratch automatically or through a window property rule.
+Scratch layers are an escape hatch to a familiar floating layout. They are intended to store globally useful windows such as chat applications, browsers, and terminals. Each layer is identified by a letter or number selected when assigning or directly toggling it. Layer `0` is used for windows placed in scratch automatically or through a Boolean window property rule.
 When a scratch layer is active it floats above the tiled windows; when hidden its windows are minimized. Layers toggle independently, so more than one layer can be visible at once.
 
-Pressing <kbd>Super</kbd><kbd>Escape</kbd> followed by a layer key toggles the most recently used window in that scratch layer. For example, <kbd>Super</kbd><kbd>Escape</kbd>, then <kbd>C</kbd> can show a chat layer.
+Pressing <kbd>Super</kbd><kbd>Escape</kbd> toggles the most recently used scratch layer. Every window assigned to that layer is shown or hidden together.
 Activating windows in the scratch layer is done using <kbd>Super</kbd><kbd>Tab</kbd>, the floating windows having priority in the list while active.
 When the tiling is active <kbd>Super</kbd><kbd>Shift</kbd><kbd>Tab</kbd> selects the most recently used scratch window.
 
@@ -212,11 +212,13 @@ When the tiling is active <kbd>Super</kbd><kbd>Shift</kbd><kbd>Tab</kbd> selects
 
 Scratch chords time out after two seconds and can be cancelled with <kbd>Escape</kbd>. A hint showing occupied layers is enabled by default and can be disabled from PaperWM's General settings.
 
+Applications can be assigned to a layer automatically from the `Winprops` settings tab by entering a scratch layer key for their window rule.
+
 | `scratch` keybindings                                                                             | _Can be changed in PaperWM extension settings_ | 
 | ------                                                                                            | ------- |
 | <kbd>Shift</kbd><kbd>Super</kbd><kbd>Escape</kbd>, then layer key                                 | Toggle all windows in a scratch layer |
 | <kbd>Ctrl</kbd><kbd>Super</kbd><kbd>Escape</kbd>, then layer key                                  | Attach/detach the active window in a scratch layer |
-| <kbd>Super</kbd><kbd>Escape</kbd>, then layer key                                                  | Toggle the most recent window in a scratch layer |
+| <kbd>Super</kbd><kbd>Escape</kbd>                                                                  | Toggle the most recently used scratch layer |
 
 ## Touchpad Gestures  ###
 
@@ -278,7 +280,7 @@ It's possible to set window properties using simple rules that will be applied w
 
 Property              | Input type                          | Input example | Description
 ----------------------|-------------------------------------|------------------|------------------
-`scratch_layer`       | Boolean                             | `true`, `false`  | if `true` window will be placed on the scratch layer.
+`scratch_layer`       | Boolean or one-character string     | `true`, `"c"`   | Places the window on layer `0` when `true`, or on the layer identified by the supplied letter or number.
 `preferredWidth`      | String value with `%` or `px` unit         | `"50%"`, `"450px"`    | resizes the window width to the preferred width when it's created. </br>_Note<sup>1</sup>: property not applicable to windows on scratch layer._
 
 Window properties can be added using the `Winprops` tab of the PaperWM extension settings:

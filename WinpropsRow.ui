@@ -139,7 +139,8 @@
                           <object class="GtkLabel">
                             <property name="focusable">False</property>
                             <property name="hexpand">1</property>
-                            <property name="label" translatable="yes">Open on scratch layer</property>
+                            <property name="label" translatable="yes">Scratch layer key</property>
+                            <property name="tooltip_text" translatable="yes">A letter or number identifying the scratch layer. Leave blank to tile the window normally.</property>
                             <property name="xalign">0</property>
                             <layout>
                               <property name="column">0</property>
@@ -148,9 +149,13 @@
                           </object>
                         </child>
                         <child>
-                          <object class="GtkSwitch" id="scratchLayer">
+                          <object class="GtkEntry" id="scratchLayer">
+                            <property name="width_chars">4</property>
+                            <property name="max_width_chars">4</property>
+                            <property name="max_length">1</property>
+                            <property name="placeholder_text">0</property>
                             <layout>
-                              <property name="column">1</property>
+                              <property name="column">2</property>
                               <property name="row">0</property>
                             </layout>
                           </object>

@@ -2,6 +2,12 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk';
 
+function scratchLayerKey(value) {
+    if (value === true)
+        return '0';
+    return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
 export const WinpropsPane = GObject.registerClass({
     GTypeName: 'WinpropsPane',
     Template: GLib.uri_resolve_relative(import.meta.url, './WinpropsPane.ui', GLib.UriFlags.NONE),
@@ -160,20 +166,27 @@ export const WinpropsRow = GObject.registerClass({
             this.emit('changed');
         });
 
-        this._scratchLayer.set_active(this.winprop.scratch_layer ?? false);
-        this._scratchLayer.connect('state-set', () => {
-            let isActive = this._scratchLayer.get_active();
-            this.winprop.scratch_layer = isActive;
+        const scratchLayer = scratchLayerKey(this.winprop.scratch_layer);
+        this._scratchLayer.set_text(scratchLayer.toUpperCase());
+        this._scratchLayer.connect('changed', () => {
+            const layer = this._scratchLayer.get_text().trim().toLowerCase();
+            const valid = layer === '' || /^[a-z0-9]$/.test(layer);
+            this._setError(this._scratchLayer, !valid);
+            if (!valid)
+                return;
 
-            // if is active then disable the preferredWidth input
-            this._preferredWidth.set_sensitive(!isActive);
-
+            if (layer)
+                this.winprop.scratch_layer = layer;
+            else
+                delete this.winprop.scratch_layer;
+            this._preferredWidth.set_sensitive(!layer);
+            this._accelLabel.label = this._setAccelLabel();
             this.emit('changed');
         });
 
         this._preferredWidth.set_text(this.winprop.preferredWidth ?? '');
         // if scratchLayer is active then users can't edit preferredWidth
-        this._preferredWidth.set_sensitive(!this.winprop.scratch_layer ?? true);
+        this._preferredWidth.set_sensitive(!this.winprop.scratch_layer);
 
         this._preferredWidth.connect('changed', () => {
             // if has value, needs to be valid (have a value or unit)
@@ -299,7 +312,8 @@ export const WinpropsRow = GObject.registerClass({
 
     _setAccelLabel() {
         if (this.winprop.scratch_layer ?? false) {
-            return 'scratch layer';
+            const layer = scratchLayerKey(this.winprop.scratch_layer).toUpperCase();
+            return `scratch layer ${layer}`;
         }
         else if (this.winprop.preferredWidth ?? false) {
             return 'preferred width';
