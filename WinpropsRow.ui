@@ -155,6 +155,19 @@
                             </layout>
                           </object>
                         </child>
+                        <child>
+                          <object class="GtkEntry" id="scratchLayerKey">
+                            <property name="width_chars">4</property>
+                            <property name="max_width_chars">4</property>
+                            <property name="max_length">1</property>
+                            <property name="placeholder_text">0</property>
+                            <property name="tooltip_text" translatable="yes">Optional scratch layer key (A-Z or 0-9). Leave blank for the default layer.</property>
+                            <layout>
+                              <property name="column">2</property>
+                              <property name="row">0</property>
+                            </layout>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child>
