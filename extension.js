@@ -88,6 +88,7 @@ export default class PaperWM extends Extension {
          * Can put PaperWM in a breakable state of lock/disable
          * while navigating.
          */
+        Keybindings.prepareForDisable();
         Navigator.finishNavigation();
     }
 

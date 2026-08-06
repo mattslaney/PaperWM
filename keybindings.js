@@ -1,4 +1,5 @@
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
@@ -13,19 +14,28 @@ const Seat = Clutter.get_default_backend().get_default_seat();
 const display = global.display;
 
 const KEYBINDINGS_KEY = 'org.gnome.shell.extensions.paperwm.keybindings';
+const CHORD_TIMEOUT_MS = 2000;
 
-let keybindSettings;
+let keybindSettings, chordSettings;
 export function enable(extension) {
     // restore previous keybinds (in case failed to restore last time, e.g. gnome crash etc)
     Settings.updateOverrides();
 
     keybindSettings = extension.getSettings(KEYBINDINGS_KEY);
+    chordSettings = extension.getSettings();
     setupActions(keybindSettings);
     signals.connect(display, 'accelerator-activated', (display, actionId, deviceId, timestamp) => {
         handleAccelerator(display, actionId, deviceId, timestamp);
     });
     actions.forEach(enableAction);
     Settings.overrideConflicts();
+    enableChords();
+
+    signals.connect(chordSettings, `changed::${Settings.CHORD_KEYBINDINGS_KEY}`, () => {
+        disableChords();
+        Settings.overrideConflicts();
+        enableChords();
+    });
 
     let schemas = [...Settings.getConflictSettings(), extension.getSettings(KEYBINDINGS_KEY)];
     schemas.forEach(schema => {
@@ -41,16 +51,217 @@ export function enable(extension) {
 }
 
 export function disable() {
+    disableChords();
     signals.destroy();
     signals = null;
     actions.forEach(disableAction);
     Settings.restoreConflicts();
 
     keybindSettings = null;
+    chordSettings = null;
     actions = null;
     nameMap = null;
     actionIdMap = null;
     keycomboMap = null;
+}
+
+let chordPrefixes = new Map();
+let activeChord = null;
+const pendingChordActions = new Set();
+
+export function prepareForDisable() {
+    activeChord?.destroy();
+    activeChord = null;
+    for (const sourceId of pendingChordActions)
+        GLib.source_remove(sourceId);
+    pendingChordActions.clear();
+}
+
+function enableChords() {
+    const configuredPrefixes = new Map();
+
+    for (const chord of Settings.getChordKeybindings(chordSettings)) {
+        const action = nameMap[chord.action];
+        if (!action)
+            continue;
+
+        const prefixCombo = Settings.keystrToKeycombo(chord.prefix);
+        const keyCombo = chordEventCombo(chord.key);
+        if (prefixCombo === '0|0' || !keyCombo)
+            continue;
+
+        let prefix = configuredPrefixes.get(prefixCombo);
+        if (!prefix) {
+            prefix = {
+                keystr: chord.prefix,
+                actions: new Map(),
+            };
+            configuredPrefixes.set(prefixCombo, prefix);
+        }
+        if (prefix.actions.has(keyCombo)) {
+            const existing = prefix.actions.get(keyCombo);
+            console.warn(
+                `Ignoring duplicate chord ${chord.prefix}, ${chord.key} for ${chord.action}; ` +
+                `already assigned to ${existing.action.name}`);
+            continue;
+        }
+        prefix.actions.set(keyCombo, { action, keystr: chord.key });
+    }
+
+    for (const prefix of configuredPrefixes.values()) {
+        const actionId = Utils.grab_accelerator(prefix.keystr);
+        if (actionId === Meta.KeyBindingAction.NONE) {
+            console.warn(`Could not enable chord prefix ${prefix.keystr}`);
+            continue;
+        }
+
+        prefix.actionId = actionId;
+        prefix.mutterName = Meta.external_binding_name_for_action(actionId);
+        chordPrefixes.set(actionId, prefix);
+        Main.wm.allowKeybinding(prefix.mutterName, Shell.ActionMode.NORMAL);
+    }
+}
+
+function disableChords() {
+    prepareForDisable();
+    for (const actionId of chordPrefixes.keys())
+        display.ungrab_accelerator(actionId);
+    chordPrefixes.clear();
+}
+
+function chordEventCombo(keystr) {
+    const [ok, keyval, mask] = Settings.accelerator_parse(keystr);
+    if (!ok)
+        return null;
+    return `${keyval}|${devirtualizeMask(mask) & chordModifierMask()}`;
+}
+
+function chordModifierMask() {
+    return 0xff & ~Clutter.ModifierType.LOCK_MASK & ~Clutter.ModifierType.MOD2_MASK;
+}
+
+function isModifierKey(keysym) {
+    return [
+        Clutter.KEY_Shift_L, Clutter.KEY_Shift_R,
+        Clutter.KEY_Control_L, Clutter.KEY_Control_R,
+        Clutter.KEY_Alt_L, Clutter.KEY_Alt_R,
+        Clutter.KEY_Meta_L, Clutter.KEY_Meta_R,
+        Clutter.KEY_Super_L, Clutter.KEY_Super_R,
+        Clutter.KEY_Hyper_L, Clutter.KEY_Hyper_R,
+    ].includes(keysym);
+}
+
+function lowerKeysym(keysym) {
+    const codepoint = Clutter.keysym_to_unicode(keysym);
+    if (!codepoint)
+        return keysym;
+    const lower = String.fromCodePoint(codepoint).toLowerCase();
+    return Clutter.unicode_to_keysym(lower.codePointAt(0));
+}
+
+function activateChordAction(action, keystr) {
+    const space = Tiling.spaces.selectedSpace;
+    const metaWindow = display.focus_window;
+    if (!metaWindow && (action.options.mutterFlags & Meta.KeyBindingFlags.PER_WINDOW))
+        return;
+
+    const binding = {
+        get_name: () => action.mutterName,
+        get_mask: () => rawMaskOfKeystr(keystr) & 0xff,
+        is_reversed: () => Boolean(action.options.mutterFlags & Meta.KeyBindingFlags.IS_REVERSED),
+    };
+    if (action.options.opensNavigator) {
+        Navigator.preview_navigate(metaWindow, space, { binding });
+    } else {
+        action.handler(metaWindow, space, { display, binding });
+    }
+}
+
+class ChordDispatcher {
+    constructor(prefix) {
+        this._prefix = prefix;
+        this._actor = Tiling.spaces.spaceContainer;
+        this._wasReactive = this._actor.reactive;
+        this._actor.reactive = true;
+        this._grab = Main.pushModal(this._actor);
+        if (!this._grab) {
+            this._actor.reactive = this._wasReactive;
+            console.warn(`Could not grab keyboard for chord prefix ${prefix.keystr}`);
+            return;
+        }
+
+        this._pressId = this._actor.connect('key-press-event', this._onKeyPress.bind(this));
+        this._releaseId = this._actor.connect('key-release-event', this._onKeyRelease.bind(this));
+        this._timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, CHORD_TIMEOUT_MS, () => {
+            this._timeoutId = null;
+            this.destroy();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    get active() {
+        return Boolean(this._grab);
+    }
+
+    _onKeyPress(_actor, event) {
+        const eventKeysym = event.get_key_symbol();
+        if (isModifierKey(eventKeysym))
+            return Clutter.EVENT_STOP;
+
+        const keysym = lowerKeysym(eventKeysym);
+        if (keysym !== Clutter.KEY_Escape) {
+            const combo = `${keysym}|${event.get_state() & chordModifierMask()}`;
+            this._match = this._prefix.actions.get(combo);
+        }
+        this._finishOnRelease = true;
+        return Clutter.EVENT_STOP;
+    }
+
+    _onKeyRelease() {
+        if (!this._finishOnRelease)
+            return Clutter.EVENT_STOP;
+
+        const match = this._match;
+        this.destroy();
+        if (match) {
+            const sourceId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                pendingChordActions.delete(sourceId);
+                activateChordAction(match.action, match.keystr);
+                return GLib.SOURCE_REMOVE;
+            });
+            pendingChordActions.add(sourceId);
+        }
+        return Clutter.EVENT_STOP;
+    }
+
+    destroy() {
+        Utils.timeout_remove(this._timeoutId);
+        this._timeoutId = null;
+        if (this._pressId) {
+            this._actor.disconnect(this._pressId);
+            this._pressId = null;
+        }
+        if (this._releaseId) {
+            this._actor.disconnect(this._releaseId);
+            this._releaseId = null;
+        }
+        if (this._grab) {
+            try {
+                Main.popModal(this._grab);
+            } catch (error) {
+                console.debug(`Failed to release chord grab: ${error.message}`);
+            }
+            this._grab = null;
+        }
+        try {
+            if (this._actor)
+                this._actor.reactive = this._wasReactive;
+        } catch (error) {
+            console.debug(`Failed to restore chord input actor: ${error.message}`);
+        }
+        if (activeChord === this)
+            activeChord = null;
+    }
 }
 
 export function registerPaperAction(actionName, handler, flags) {
@@ -537,6 +748,15 @@ export function getBoundActionId(keystr) {
 }
 
 export function handleAccelerator(display, actionId, _deviceId, _timestamp) {
+    const prefix = chordPrefixes.get(actionId);
+    if (prefix) {
+        activeChord?.destroy();
+        const dispatcher = new ChordDispatcher(prefix);
+        if (dispatcher.active)
+            activeChord = dispatcher;
+        return;
+    }
+
     const action = actionIdMap[actionId];
     if (action) {
         console.debug("#keybindings", "Schemaless keybinding activated",

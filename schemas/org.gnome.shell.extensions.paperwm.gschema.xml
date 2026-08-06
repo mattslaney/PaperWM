@@ -753,6 +753,11 @@
         <summary>Array of winprops as (JSON) string objects</summary>
     </key>
 
+    <key type="as" name="chord-keybindings">
+        <default><![CDATA[[]]]></default>
+        <summary>Array of chorded keybindings as JSON string objects</summary>
+    </key>
+
     <key type="b" name="gesture-enabled">
         <default>true</default>
         <summary>Enables PaperWM touchpad gestures</summary>
