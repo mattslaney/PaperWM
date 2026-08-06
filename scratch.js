@@ -227,13 +227,6 @@ export function toggleRecentScratchLayer() {
         toggleLayer(getScratchLayer(recentWindow));
 }
 
-export function beginRecentScratchAction() {
-    toggleRecentScratchLayer();
-    chord?.close();
-    chord = new ScratchContinuation();
-    chord.open();
-}
-
 export function show(top) {
     showScratchWindows(getScratchWindows(), top);
 }
@@ -248,14 +241,6 @@ function toggleLayer(layer) {
         hideScratchWindows(windows);
     else
         showScratchWindows(windows);
-}
-
-function switchLayer(layer) {
-    const targetWindows = getScratchWindows(layer);
-    const otherWindows = getScratchWindows()
-        .filter(metaWindow => getScratchLayer(metaWindow) !== normalizeLayer(layer));
-    hideScratchWindows(otherWindows);
-    showScratchWindows(targetWindows);
 }
 
 function showScratchWindows(windows, top = false) {
@@ -397,7 +382,6 @@ class ScratchChord {
         const titles = {
             layer: 'Toggle scratch layer',
             attach: 'Attach focused window',
-            switch: 'Switch scratch layer',
         };
         this._showHint(titles[operation]);
     }
@@ -466,8 +450,6 @@ class ScratchChord {
         this.pendingOperation = () => {
             if (operation === 'layer')
                 toggleLayer(layer);
-            else if (operation === 'switch')
-                switchLayer(layer);
             else
                 toggleInLayer(metaWindow, layer);
         };
@@ -519,53 +501,6 @@ class ScratchChord {
             this.close();
             return GLib.SOURCE_REMOVE;
         });
-    }
-}
-
-class ScratchContinuation {
-    constructor() {
-        this.signalId = null;
-        this.timeoutId = null;
-    }
-
-    open() {
-        this.signalId = global.stage.connect('captured-event', (_actor, event) => {
-            if (event.type() !== Clutter.EventType.KEY_PRESS)
-                return Clutter.EVENT_PROPAGATE;
-
-            const key = event.get_key_symbol();
-            const modifierMask =
-                Clutter.ModifierType.CONTROL_MASK |
-                Clutter.ModifierType.MOD1_MASK;
-            if ((key === Clutter.KEY_Tab || key === Clutter.KEY_ISO_Left_Tab) &&
-                !(event.get_state() & modifierMask)) {
-                this.close();
-                beginChord('switch');
-                return Clutter.EVENT_STOP;
-            }
-            if (layerFromEvent(event) !== undefined)
-                this.close();
-            return Clutter.EVENT_PROPAGATE;
-        });
-        this.timeoutId = GLib.timeout_add(
-            GLib.PRIORITY_DEFAULT,
-            CHORD_TIMEOUT_MS,
-            () => {
-                this.timeoutId = null;
-                this.close();
-                return GLib.SOURCE_REMOVE;
-            });
-    }
-
-    close() {
-        Utils.timeout_remove(this.timeoutId);
-        this.timeoutId = null;
-        if (this.signalId) {
-            global.stage.disconnect(this.signalId);
-            this.signalId = null;
-        }
-        if (chord === this)
-            chord = null;
     }
 }
 
