@@ -81,4 +81,59 @@ DEFAULT STYLES ARE PROVIDED BELOW FOR REFERENCE:
     border-radius: 1px;
 }
 
+.paperwm-command-palette-backdrop {
+    background-color: rgba(0, 0, 0, 0.35);
+}
+
+.paperwm-command-palette {
+    padding: 14px;
+    spacing: 10px;
+    border-radius: 12px;
+    background-color: rgba(30, 30, 30, 0.98);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.paperwm-command-palette-entry {
+    padding: 10px 12px;
+}
+
+.paperwm-command-palette-results {
+    spacing: 2px;
+}
+
+.paperwm-command-palette-row {
+    padding: 9px 10px;
+    border-radius: 7px;
+    text-align: left;
+}
+
+.paperwm-command-palette-row:selected {
+    background-color: rgba(255, 255, 255, 0.13);
+}
+
+.paperwm-command-palette-description {
+    text-align: left;
+}
+
+.paperwm-command-palette-shortcut {
+    margin-left: 18px;
+    color: #c0bfbc;
+    font-size: 0.9em;
+}
+
+.paperwm-command-palette-shortcut.unbound {
+    color: #77767b;
+    font-style: italic;
+}
+
+.paperwm-command-palette-empty {
+    padding: 24px;
+    color: #9a9996;
+}
+
+.paperwm-command-palette-footer {
+    color: #9a9996;
+    font-size: 0.85em;
+}
+
 */

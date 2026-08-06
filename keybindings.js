@@ -6,7 +6,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {
     Settings, Utils, Tiling, Navigator,
-    App, Scratch, LiveAltTab, Topbar
+    App, Scratch, LiveAltTab, Topbar, CommandPalette
 } from './imports.js';
 
 const Seat = Clutter.get_default_backend().get_default_seat();
@@ -60,11 +60,11 @@ export function registerPaperAction(actionName, handler, flags) {
         { settings: keybindSettings, mutterFlags: flags, activeInNavigator: true });
 }
 
-export function registerNavigatorAction(name, handler) {
+export function registerNavigatorAction(name, handler, options = {}) {
     registerAction(
         name,
         handler,
-        { settings: keybindSettings, opensNavigator: true });
+        { ...options, settings: keybindSettings, opensNavigator: true });
 }
 
 export function registerMinimapAction(name, handler) {
@@ -97,6 +97,8 @@ export function setupActions(settings) {
     registerAction('live-alt-tab-scratch', LiveAltTab.liveAltTabScratch, { settings });
     registerAction('live-alt-tab-scratch-backward', LiveAltTab.liveAltTabScratch,
         { settings, mutterFlags: Meta.KeyBindingFlags.IS_REVERSED });
+
+    registerAction('show-command-palette', CommandPalette.toggle, { settings });
 
     registerAction('move-monitor-right', () => {
         Tiling.spaces.switchMonitor(Meta.DisplayDirection.RIGHT, true);
@@ -186,7 +188,7 @@ export function setupActions(settings) {
         space.settings.set_boolean('show-position-bar', !value);
     });
 
-    registerNavigatorAction('take-window', Tiling.takeWindow);
+    registerNavigatorAction('take-window', Tiling.takeWindow, { persistentNavigator: true });
 
     registerMinimapAction("switch-next", (mw, space) => space.switchLinear(1, false));
     registerMinimapAction("switch-previous", (mw, space) => space.switchLinear(-1, false));
@@ -362,6 +364,36 @@ export function byMutterName(name) {
 
 export function byId(mutterId) {
     return actionIdMap[mutterId];
+}
+
+export function getActionEntries() {
+    return actions
+        .filter(action => action.options.settings && action.name !== 'show-command-palette')
+        .map(action => ({
+            action,
+            name: action.name,
+            description: keybindSettings.settings_schema.get_key(action.name).get_summary(),
+            keybindings: keybindSettings.get_strv(action.name),
+        }));
+}
+
+export function activateAction(action) {
+    const space = Tiling.spaces.selectedSpace;
+    const metaWindow = space?.selectedWindow;
+    if (!space || (!metaWindow && (action.options.mutterFlags & Meta.KeyBindingFlags.PER_WINDOW)))
+        return false;
+
+    if (action.options.opensNavigator)
+        Navigator.activateAction(action, action.options.persistentNavigator);
+    else {
+        const binding = {
+            get_name: () => action.mutterName,
+            get_mask: () => 0,
+            is_reversed: () => Boolean(action.options.mutterFlags & Meta.KeyBindingFlags.IS_REVERSED),
+        };
+        action.handler(metaWindow, space, { display, binding });
+    }
+    return true;
 }
 
 export function asKeyHandler(actionHandler) {
