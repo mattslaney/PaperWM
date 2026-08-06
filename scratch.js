@@ -86,9 +86,6 @@ export function makeScratch(metaWindow, layer = null) {
     if (!metaWindow.minimized)
         Tiling.showWindow(metaWindow);
 
-    if (requestedLayer !== null && !metaWindow.minimized)
-        revealScratchWindows(getScratchWindows(requestedLayer));
-
     if (fromTiling) {
         let f = metaWindow.get_frame_rect();
         let targetFrame = null;
@@ -171,6 +168,8 @@ export function toggleInLayer(metaWindow, layer) {
     } else {
         const fromNonScratch = !isScratchWindow(metaWindow);
         makeScratch(metaWindow, layer);
+        if (!metaWindow.minimized)
+            revealScratchWindows(getScratchWindows(layer));
         if (fromNonScratch && metaWindow.has_focus)
             Tiling.spaces.activeSpace.setSelectionInactive();
     }

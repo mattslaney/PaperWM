@@ -294,6 +294,8 @@ export function conflictKeyChanged(settings, key) {
 
     const newKeybind = settings.get_value(key).deep_unpack();
     if (Array.isArray(newKeybind) && newKeybind.length === 0) {
+        if (settings === keybindSettings)
+            return overrideConflicts();
         return;
     }
 
@@ -403,7 +405,7 @@ export function restoreConflicts() {
 
    defwinprop({
      wm_class: "Riot",
-     scratch_layer: true
+     scratch_layer: "c"
    })
 */
 export let winprops = [];
