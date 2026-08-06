@@ -213,8 +213,8 @@ class ActionDispatcher {
         return Clutter.EVENT_STOP;
     }
 
-    _doAction(mutterActionId) {
-        let action = Keybindings.byId(mutterActionId);
+    _doAction(mutterActionId, paperAction = null) {
+        let action = paperAction ?? Keybindings.byId(mutterActionId);
         let space = Tiling.spaces.selectedSpace;
         let metaWindow = space.selectedWindow;
         const nav = getNavigator();
@@ -248,6 +248,15 @@ class ActionDispatcher {
                 return false; // on return false destroys timeout
             });
         }
+    }
+
+    activate(action, persistent = false) {
+        this._modifierMask = 0;
+        this.navigator = getNavigator();
+        Topbar.fixTopBar();
+        this._doAction(action.id, action);
+        if (!persistent)
+            this._finish(global.get_current_time());
     }
 
     _finish(_timestamp) {
@@ -519,6 +528,10 @@ export function getActionDispatcher(mode) {
     }
     dispatcher = new ActionDispatcher();
     return getActionDispatcher(mode);
+}
+
+export function activateAction(action, persistent = false) {
+    getActionDispatcher(DispatcherMode.KEYBOARD).activate(action, persistent);
 }
 
 /**

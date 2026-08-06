@@ -11,6 +11,7 @@ const _ = s => s;
 const KEYBINDINGS_KEY = 'org.gnome.shell.extensions.paperwm.keybindings';
 
 const sections = {
+    general: 'General',
     windows: 'Windows',
     workspaces: 'Workspaces',
     monitors: 'Monitors',
@@ -18,6 +19,9 @@ const sections = {
 };
 
 const actions = {
+    general: [
+        'show-command-palette',
+    ],
     windows: [
         'new-window',
         'close-window',

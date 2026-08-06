@@ -9,6 +9,11 @@
       <summary>Open new window</summary>
     </key>
 
+    <key type="as" name="show-command-palette">
+      <default><![CDATA[['<Super><Shift>p']]]></default>
+      <summary>Show the PaperWM command palette</summary>
+    </key>
+
     <key type="as" name="live-alt-tab">
       <default><![CDATA[['<Super>Tab', '<Alt>Tab']]]></default>
       <summary>Switch to previously active window</summary>

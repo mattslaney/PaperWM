@@ -1,6 +1,7 @@
 export * as AcceleratorParse from './acceleratorparse.js';
 export * as App from './app.js';
 export * as Background from './background.js';
+export * as CommandPalette from './commandPalette.js';
 export * as Gestures from './gestures.js';
 export * as Grab from './grab.js';
 export * as Keybindings from './keybindings.js';
