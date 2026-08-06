@@ -180,6 +180,15 @@
         <summary>Attach/detach the active window into a keyed scratch layer</summary>
     </key>
 
+    <key type="as" name="chord-prefix-1"><default><![CDATA[[]]]></default><summary>Internal chord prefix</summary></key>
+    <key type="as" name="chord-prefix-2"><default><![CDATA[[]]]></default><summary>Internal chord prefix</summary></key>
+    <key type="as" name="chord-prefix-3"><default><![CDATA[[]]]></default><summary>Internal chord prefix</summary></key>
+    <key type="as" name="chord-prefix-4"><default><![CDATA[[]]]></default><summary>Internal chord prefix</summary></key>
+    <key type="as" name="chord-prefix-5"><default><![CDATA[[]]]></default><summary>Internal chord prefix</summary></key>
+    <key type="as" name="chord-prefix-6"><default><![CDATA[[]]]></default><summary>Internal chord prefix</summary></key>
+    <key type="as" name="chord-prefix-7"><default><![CDATA[[]]]></default><summary>Internal chord prefix</summary></key>
+    <key type="as" name="chord-prefix-8"><default><![CDATA[[]]]></default><summary>Internal chord prefix</summary></key>
+
     <key type="as" name="take-window">
         <default><![CDATA[['<Super>t']]]></default>
         <summary>Take the window, dropping it when finished navigating</summary>

@@ -15,6 +15,8 @@ const display = global.display;
 
 const KEYBINDINGS_KEY = 'org.gnome.shell.extensions.paperwm.keybindings';
 const CHORD_TIMEOUT_MS = 2000;
+const PREFIX_RELOAD_DELAY_MS = 250;
+const INTERNAL_PREFIX_ACTIONS = Array.from({ length: 8 }, (_, i) => `chord-prefix-${i + 1}`);
 const KEYED_SCRATCH_ACTIONS = new Set([
     'toggle-keyed-scratch-layer',
     'toggle-keyed-scratch',
@@ -31,10 +33,10 @@ export function enable(extension) {
     signals.connect(display, 'accelerator-activated', (display, actionId, deviceId, timestamp) => {
         handleAccelerator(display, actionId, deviceId, timestamp);
     });
-    Settings.overrideConflicts();
-    enableReservedPrefixes();
     actions.filter(action => !action.options.reservedPrefix).forEach(enableAction);
-    enableChords();
+    Settings.overrideConflicts();
+    // Mutter releases overridden GNOME accelerators asynchronously.
+    queueChordReload(true, false);
 
     signals.connect(chordSettings, `changed::${Settings.CHORD_KEYBINDINGS_KEY}`, () => {
         disableChords();
@@ -45,6 +47,8 @@ export function enable(extension) {
     let schemas = [...Settings.getConflictSettings(), extension.getSettings(KEYBINDINGS_KEY)];
     schemas.forEach(schema => {
         signals.connect(schema, 'changed', (settings, key) => {
+            if (settings === keybindSettings && INTERNAL_PREFIX_ACTIONS.includes(key))
+                return;
             const numConflicts = Settings.conflictKeyChanged(settings, key);
             if (numConflicts > 0) {
                 Main.notifyError(
@@ -75,11 +79,12 @@ export function disable() {
 }
 
 let chordPrefixes = new Map();
-let reservedPrefixes = new Map();
 let reservedPrefixCombos = new Set();
+let schemaPrefixes = new Map();
 let activeChord = null;
 let chordReloadId = null;
 let reloadReservedPrefixes = false;
+let reloadCycleActions = false;
 const reservedDisplacedActions = new Set();
 const pendingChordActions = new Set();
 
@@ -92,22 +97,26 @@ export function prepareForDisable() {
     Utils.timeout_remove(chordReloadId);
     chordReloadId = null;
     reloadReservedPrefixes = false;
+    reloadCycleActions = false;
 }
 
-function queueChordReload(reloadReserved = false) {
+function queueChordReload(reloadReserved = false, cycleActions = reloadReserved) {
     reloadReservedPrefixes ||= reloadReserved;
+    reloadCycleActions ||= cycleActions;
     if (chordReloadId)
         return;
-    chordReloadId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+    chordReloadId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, PREFIX_RELOAD_DELAY_MS, () => {
         chordReloadId = null;
         const reloadReserved = reloadReservedPrefixes;
+        const cycleActions = reloadCycleActions;
         reloadReservedPrefixes = false;
+        reloadCycleActions = false;
         disableChords();
         if (reloadReserved) {
-            const reloadActions = actions.filter(action =>
+            const reloadActions = cycleActions ? actions.filter(action =>
                 !action.options.reservedPrefix &&
                 (action.options.settings || action.id !== Meta.KeyBindingAction.NONE ||
-                    reservedDisplacedActions.has(action)));
+                    reservedDisplacedActions.has(action))) : [];
             reloadActions.forEach(disableAction);
             disableReservedPrefixes();
             enableReservedPrefixes();
@@ -165,6 +174,7 @@ function enableChords() {
         const actionId = Utils.grab_accelerator(prefix.keystr);
         if (actionId === Meta.KeyBindingAction.NONE) {
             console.warn(`Could not enable chord prefix ${prefix.keystr}`);
+            enableSchemaPrefix(prefix);
             continue;
         }
 
@@ -180,6 +190,7 @@ function disableChords() {
     for (const actionId of chordPrefixes.keys())
         display.ungrab_accelerator(actionId);
     chordPrefixes.clear();
+    disableSchemaPrefixes();
 }
 
 function enableReservedPrefixes() {
@@ -198,29 +209,51 @@ function enableReservedPrefixes() {
             configuredCombos.set(keycombo, action.name);
             reservedPrefixCombos.add(keycombo);
 
-            const actionId = Utils.grab_accelerator(keystr);
-            if (actionId === Meta.KeyBindingAction.NONE) {
-                console.warn(`Could not enable keyed scratch prefix ${keystr}`);
-                continue;
-            }
-            const prefix = {
-                actionId,
-                action: action.name,
-                keystr,
-                mutterName: Meta.external_binding_name_for_action(actionId),
-            };
-            reservedPrefixes.set(actionId, prefix);
-            Main.wm.allowKeybinding(prefix.mutterName, Shell.ActionMode.NORMAL);
+            enableAction(action);
         }
     }
 }
 
 function disableReservedPrefixes() {
     prepareForDisable();
-    for (const actionId of reservedPrefixes.keys())
-        display.ungrab_accelerator(actionId);
-    reservedPrefixes.clear();
+    actions.filter(action => action.options.reservedPrefix).forEach(disableAction);
     reservedPrefixCombos.clear();
+}
+
+function startChord(prefix) {
+    activeChord?.destroy();
+    const dispatcher = new ChordDispatcher(prefix);
+    if (dispatcher.active)
+        activeChord = dispatcher;
+}
+
+function enableSchemaPrefix(prefix) {
+    const actionName = INTERNAL_PREFIX_ACTIONS.find(name => !schemaPrefixes.has(name));
+    if (!actionName) {
+        console.warn(`Could not enable chord prefix ${prefix.keystr}: too many conflicting prefixes`);
+        return;
+    }
+    keybindSettings.set_strv(actionName, [prefix.keystr]);
+    const actionId = Main.wm.addKeybinding(
+        actionName,
+        keybindSettings,
+        Meta.KeyBindingFlags.NONE,
+        Shell.ActionMode.NORMAL,
+        () => startChord(prefix));
+    if (actionId === Meta.KeyBindingAction.NONE) {
+        console.warn(`Could not enable chord prefix ${prefix.keystr}`);
+        keybindSettings.reset(actionName);
+        return;
+    }
+    schemaPrefixes.set(actionName, prefix);
+}
+
+function disableSchemaPrefixes() {
+    for (const actionName of schemaPrefixes.keys()) {
+        Main.wm.removeKeybinding(actionName);
+        keybindSettings.reset(actionName);
+    }
+    schemaPrefixes.clear();
 }
 
 function chordEventCombo(keystr) {
@@ -566,10 +599,12 @@ export function setupActions(settings) {
         Scratch.toggle,
         Meta.KeyBindingFlags.PER_WINDOW);
 
-    registerAction('toggle-keyed-scratch-layer', null,
-        { settings, reservedPrefix: 'toggle' });
+    registerAction('toggle-keyed-scratch-layer', () =>
+        startChord(keyedScratchPrefix({ action: 'toggle-keyed-scratch-layer', keystr: '' })),
+    { settings, reservedPrefix: 'toggle' });
 
-    registerAction('toggle-keyed-scratch', null,
+    registerAction('toggle-keyed-scratch', () =>
+        startChord(keyedScratchPrefix({ action: 'toggle-keyed-scratch', keystr: '' })),
         {
             settings,
             reservedPrefix: 'attach',
@@ -844,7 +879,7 @@ export function devirtualizeMask(gdkVirtualMask) {
     const keymap = Seat.get_keymap();
     // Clutter.Keymap stopped exposing map_virtual_modifiers() in GNOME 46.
     // Clutter events use the same virtual mask bits on those releases.
-    if (typeof keymap.map_virtual_modifiers !== 'function')
+    if (!keymap || typeof keymap.map_virtual_modifiers !== 'function')
         return gdkVirtualMask;
 
     let [success, rawMask] = keymap.map_virtual_modifiers(gdkVirtualMask);
@@ -882,13 +917,9 @@ export function getBoundActionId(keystr) {
 }
 
 export function handleAccelerator(display, actionId, _deviceId, _timestamp) {
-    const reserved = reservedPrefixes.get(actionId);
-    const prefix = reserved ? keyedScratchPrefix(reserved) : chordPrefixes.get(actionId);
+    const prefix = chordPrefixes.get(actionId);
     if (prefix) {
-        activeChord?.destroy();
-        const dispatcher = new ChordDispatcher(prefix);
-        if (dispatcher.active)
-            activeChord = dispatcher;
+        startChord(prefix);
         return;
     }
 
