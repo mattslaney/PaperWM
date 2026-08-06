@@ -170,6 +170,16 @@
         <summary>Attach/detach the active window into the scratch layer</summary>
     </key>
 
+    <key type="as" name="toggle-keyed-scratch-layer">
+        <default><![CDATA[[]]]></default>
+        <summary>Toggle a keyed scratch layer</summary>
+    </key>
+
+    <key type="as" name="toggle-keyed-scratch">
+        <default><![CDATA[[]]]></default>
+        <summary>Attach/detach the active window into a keyed scratch layer</summary>
+    </key>
+
     <key type="as" name="take-window">
         <default><![CDATA[['<Super>t']]]></default>
         <summary>Take the window, dropping it when finished navigating</summary>
