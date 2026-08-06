@@ -46,6 +46,8 @@ export function enable(extension) {
                     `PaperWM: overriding '${key}' keybind`,
                     `this Gnome Keybind will be restored when PaperWM is disabled`);
             }
+            if (settings === keybindSettings)
+                queueChordReload();
         });
     });
 }
@@ -67,6 +69,7 @@ export function disable() {
 
 let chordPrefixes = new Map();
 let activeChord = null;
+let chordReloadId = null;
 const pendingChordActions = new Set();
 
 export function prepareForDisable() {
@@ -75,6 +78,19 @@ export function prepareForDisable() {
     for (const sourceId of pendingChordActions)
         GLib.source_remove(sourceId);
     pendingChordActions.clear();
+    Utils.timeout_remove(chordReloadId);
+    chordReloadId = null;
+}
+
+function queueChordReload() {
+    if (chordReloadId)
+        return;
+    chordReloadId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+        chordReloadId = null;
+        disableChords();
+        enableChords();
+        return GLib.SOURCE_REMOVE;
+    });
 }
 
 function enableChords() {
@@ -137,7 +153,10 @@ function chordEventCombo(keystr) {
 }
 
 function chordModifierMask() {
-    return 0xff & ~Clutter.ModifierType.LOCK_MASK & ~Clutter.ModifierType.MOD2_MASK;
+    return 0xff &
+        ~Clutter.ModifierType.LOCK_MASK &
+        ~Clutter.ModifierType.MOD2_MASK &
+        ~Clutter.ModifierType.MOD5_MASK;
 }
 
 function isModifierKey(keysym) {
@@ -148,6 +167,10 @@ function isModifierKey(keysym) {
         Clutter.KEY_Meta_L, Clutter.KEY_Meta_R,
         Clutter.KEY_Super_L, Clutter.KEY_Super_R,
         Clutter.KEY_Hyper_L, Clutter.KEY_Hyper_R,
+        Clutter.KEY_Caps_Lock, Clutter.KEY_Shift_Lock, Clutter.KEY_Num_Lock,
+        Clutter.KEY_Mode_switch, Clutter.KEY_ISO_Lock,
+        Clutter.KEY_ISO_Level3_Shift, Clutter.KEY_ISO_Level3_Latch, Clutter.KEY_ISO_Level3_Lock,
+        Clutter.KEY_ISO_Level5_Shift, Clutter.KEY_ISO_Level5_Latch, Clutter.KEY_ISO_Level5_Lock,
     ].includes(keysym);
 }
 
