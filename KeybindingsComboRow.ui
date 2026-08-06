@@ -22,6 +22,22 @@
                 </child>
 
                 <child>
+                  <object class="GtkLabel" id="chordSeparator">
+                    <property name="label" translatable="yes">then</property>
+                    <property name="visible">False</property>
+                    <style>
+                      <class name="dim-label" />
+                    </style>
+                  </object>
+                </child>
+
+                <child>
+                  <object class="GtkShortcutLabel" id="secondShortcutLabel">
+                    <property name="visible">False</property>
+                  </object>
+                </child>
+
+                <child>
                   <object class="GtkMenuButton" id="conflictButton">
                     <property name="tooltip_text" translatable="yes">Conflicts</property>
                     <property name="icon_name">dialog-error-symbolic</property>
