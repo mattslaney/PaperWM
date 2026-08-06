@@ -237,7 +237,7 @@ export function setupActions(settings) {
         (_mw, space) => space.swap(Meta.MotionDirection.DOWN));
 
     registerAction("toggle-scratch-window",
-        Scratch.toggleRecentScratchLayer,
+        Scratch.beginRecentScratchAction,
         { settings });
 
     registerAction("toggle-scratch-layer",

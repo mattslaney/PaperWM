@@ -157,7 +157,7 @@
 
     <key type="as" name="toggle-scratch-window">
       <default><![CDATA[['<Super>Escape']]]></default>
-      <summary>Toggle the most recently used scratch layer</summary>
+      <summary>Toggle the recent scratch layer; press Tab and a layer key to switch layers</summary>
     </key>
 
     <key type="as" name="toggle-scratch-layer">
@@ -167,7 +167,7 @@
 
     <key type="as" name="toggle-scratch">
         <default><![CDATA[['<Super><Ctrl>Escape']]]></default>
-      <summary>Choose a scratch layer for the active window</summary>
+      <summary>Detach the active scratch window or choose a layer for a tiled window</summary>
     </key>
 
     <key type="as" name="take-window">
