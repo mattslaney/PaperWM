@@ -735,7 +735,15 @@ export function unbindkey(actionIdOrKeystr) {
 }
 
 export function devirtualizeMask(gdkVirtualMask) {
+    if (gdkVirtualMask === 0)
+        return 0;
+
     const keymap = Seat.get_keymap();
+    // Clutter.Keymap stopped exposing map_virtual_modifiers() in GNOME 46.
+    // Clutter events use the same virtual mask bits on those releases.
+    if (typeof keymap.map_virtual_modifiers !== 'function')
+        return gdkVirtualMask;
+
     let [success, rawMask] = keymap.map_virtual_modifiers(gdkVirtualMask);
     if (!success)
         throw new Error(`Couldn't devirtualize mask ${gdkVirtualMask}`);
