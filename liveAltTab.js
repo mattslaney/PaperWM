@@ -47,7 +47,7 @@ export const LiveAltTab = GObject.registerClass(
                     ? global.workspace_manager.get_active_workspace() : null)
                 .filter(w => !Scratch.isScratchWindow(w));
 
-            let scratch = Scratch.getScratchWindows();
+            let scratch = Scratch.getAllScratchWindows();
 
             if (this.scratchOnly) {
                 return reverse ? scratch.reverse() : scratch;

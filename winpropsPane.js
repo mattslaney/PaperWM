@@ -105,6 +105,7 @@ export const WinpropsRow = GObject.registerClass({
         'wmClass',
         'title',
         'scratchLayer',
+        'scratchLayerKey',
         'preferredWidth',
         'space',
         'focus',
@@ -160,20 +161,44 @@ export const WinpropsRow = GObject.registerClass({
             this.emit('changed');
         });
 
-        this._scratchLayer.set_active(this.winprop.scratch_layer ?? false);
-        this._scratchLayer.connect('state-set', () => {
-            let isActive = this._scratchLayer.get_active();
-            this.winprop.scratch_layer = isActive;
+        const scratchLayerKey = typeof this.winprop.scratch_layer === 'string'
+            ? this.winprop.scratch_layer.trim().toLowerCase()
+            : '';
+        const scratchActive = Boolean(this.winprop.scratch_layer);
+        this._scratchLayer.set_active(scratchActive);
+        this._scratchLayerKey.set_text(scratchLayerKey.toUpperCase());
+        this._scratchLayerKey.set_sensitive(scratchActive);
+        this._setError(this._scratchLayerKey,
+            scratchLayerKey !== '' && !/^[a-z0-9]$/.test(scratchLayerKey));
 
-            // if is active then disable the preferredWidth input
-            this._preferredWidth.set_sensitive(!isActive);
+        this._scratchLayer.connect('state-set', (_widget, active) => {
+            if (active) {
+                const layer = this._scratchLayerKey.get_text().trim().toLowerCase();
+                this.winprop.scratch_layer = /^[a-z0-9]$/.test(layer) ? layer : true;
+            } else {
+                delete this.winprop.scratch_layer;
+            }
+            this._scratchLayerKey.set_sensitive(active);
+            this._preferredWidth.set_sensitive(!active);
+            this._accelLabel.label = this._setAccelLabel();
+            this.emit('changed');
+        });
 
+        this._scratchLayerKey.connect('changed', () => {
+            const layer = this._scratchLayerKey.get_text().trim().toLowerCase();
+            const valid = layer === '' || /^[a-z0-9]$/.test(layer);
+            this._setError(this._scratchLayerKey, !valid);
+            if (!valid || !this._scratchLayer.get_active())
+                return;
+
+            this.winprop.scratch_layer = layer || true;
+            this._accelLabel.label = this._setAccelLabel();
             this.emit('changed');
         });
 
         this._preferredWidth.set_text(this.winprop.preferredWidth ?? '');
         // if scratchLayer is active then users can't edit preferredWidth
-        this._preferredWidth.set_sensitive(!this.winprop.scratch_layer ?? true);
+        this._preferredWidth.set_sensitive(!scratchActive);
 
         this._preferredWidth.connect('changed', () => {
             // if has value, needs to be valid (have a value or unit)
@@ -299,7 +324,10 @@ export const WinpropsRow = GObject.registerClass({
 
     _setAccelLabel() {
         if (this.winprop.scratch_layer ?? false) {
-            return 'scratch layer';
+            const layer = typeof this.winprop.scratch_layer === 'string'
+                ? ` ${this.winprop.scratch_layer.toUpperCase()}`
+                : '';
+            return `scratch layer${layer}`;
         }
         else if (this.winprop.preferredWidth ?? false) {
             return 'preferred width';

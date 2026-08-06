@@ -4119,7 +4119,7 @@ export function insertWindow(metaWindow, options = {}) {
             focusWindow = mru[1];
         }
 
-        let addToScratch = false;
+        let scratchLayer = null;
 
         let winprop = Settings.find_winprop(metaWindow);
         if (winprop) {
@@ -4127,8 +4127,16 @@ export function insertWindow(metaWindow, options = {}) {
                 Settings.winprops.splice(Settings.winprops.indexOf(winprop), 1);
             }
             if (winprop.scratch_layer) {
-                console.debug("#winprops", `Move ${metaWindow?.title} to scratch`);
-                addToScratch = true;
+                scratchLayer = typeof winprop.scratch_layer === 'string'
+                    ? winprop.scratch_layer.trim().toLowerCase()
+                    : Scratch.DEFAULT_LAYER;
+                if (!/^[a-z0-9]$/.test(scratchLayer)) {
+                    console.warn("#winprops",
+                        `Invalid scratch layer '${scratchLayer}', using layer ${Scratch.DEFAULT_LAYER}`);
+                    scratchLayer = Scratch.DEFAULT_LAYER;
+                }
+                console.debug("#winprops",
+                    `Move ${metaWindow?.title} to scratch layer ${scratchLayer.toUpperCase()}`);
             }
 
             // pass winprop properties to metaWindow
@@ -4150,9 +4158,9 @@ export function insertWindow(metaWindow, options = {}) {
             }
         }
 
-        if (addToScratch) {
+        if (scratchLayer) {
             connectSizeChanged();
-            Scratch.makeScratch(metaWindow);
+            Scratch.makeScratch(metaWindow, scratchLayer);
             activateWindowAfterRendered(actor, metaWindow);
             return;
         }
