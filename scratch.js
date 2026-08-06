@@ -17,6 +17,7 @@ const scratchLayer = Symbol.for('paperwm.scratch-layer');
 const scratchFrame = Symbol.for('paperwm.scratch-frame');
 const DEFAULT_LAYER = '0';
 const CHORD_TIMEOUT_MS = 2000;
+const RECENT_CONTINUATION_TIMEOUT_MS = 750;
 
 let chord, operationIdleId;
 export function enable() {
@@ -227,6 +228,13 @@ export function toggleRecentScratchLayer() {
         toggleLayer(getScratchLayer(recentWindow));
 }
 
+export function beginRecentScratchAction() {
+    toggleRecentScratchLayer();
+    chord?.close();
+    chord = new ScratchContinuation();
+    chord.open();
+}
+
 export function show(top) {
     showScratchWindows(getScratchWindows(), top);
 }
@@ -241,6 +249,14 @@ function toggleLayer(layer) {
         hideScratchWindows(windows);
     else
         showScratchWindows(windows);
+}
+
+function switchLayer(layer) {
+    const targetWindows = getScratchWindows(layer);
+    const otherWindows = getScratchWindows()
+        .filter(metaWindow => getScratchLayer(metaWindow) !== normalizeLayer(layer));
+    hideScratchWindows(otherWindows);
+    showScratchWindows(targetWindows);
 }
 
 function showScratchWindows(windows, top = false) {
@@ -298,7 +314,10 @@ export function beginScratchLayerChord() {
 }
 
 export function beginScratchAttachChord(metaWindow) {
-    beginChord('attach', metaWindow);
+    if (isScratchWindow(metaWindow))
+        unmakeScratch(metaWindow);
+    else
+        beginChord('attach', metaWindow);
 }
 
 function normalizeLayer(layer) {
@@ -357,41 +376,36 @@ class ScratchChord {
         this.metaWindow = metaWindow;
         this.grab = null;
         this.timeoutId = null;
+        this.closeOnKeyRelease = false;
+        this.pendingKeyCode = null;
+        this.pendingOperation = null;
 
         this.actor = new St.Widget({ reactive: true, can_focus: true });
         this.actor.set_position(0, 0);
         this.actor.set_size(global.stage.width, global.stage.height);
         this.actor.connect('key-press-event', this._onKeyPress.bind(this));
+        this.actor.connect('key-release-event', this._onKeyRelease.bind(this));
         this.actor.connect('button-press-event', () => {
-            this.close();
+            this.closeOnButtonRelease = true;
+            return Clutter.EVENT_STOP;
+        });
+        this.actor.connect('button-release-event', () => {
+            if (this.closeOnButtonRelease)
+                this.close();
             return Clutter.EVENT_STOP;
         });
 
-        if (Settings.prefs.show_scratch_chord_hint) {
-            const titles = {
-                layer: 'Toggle scratch layer',
-                attach: 'Attach/detach focused window',
-            };
-            const summary = layerSummary();
-            const text = `${titles[operation]}\nPress a layer key (A-Z or 0-9)` +
-                (summary ? `\n\n${summary}` : '\n\nNo occupied layers');
-            this.hint = new St.Label({
-                style_class: 'scratch-chord-hint',
-                text,
-                width: 440,
-            });
-            this.actor.add_child(this.hint);
-        }
+        const titles = {
+            layer: 'Toggle scratch layer',
+            attach: 'Attach focused window',
+            switch: 'Switch scratch layer',
+        };
+        this._showHint(titles[operation]);
     }
 
     open() {
         Main.uiGroup.add_child(this.actor);
-        if (this.hint) {
-            const monitor = Main.layoutManager.currentMonitor ?? Main.layoutManager.primaryMonitor;
-            this.hint.set_position(
-                monitor.x + Math.floor((monitor.width - this.hint.width) / 2),
-                monitor.y + Math.floor(monitor.height * 0.16));
-        }
+        this._positionHint();
 
         this.grab = Main.pushModal(this.actor);
         if (!this.grab) {
@@ -400,11 +414,7 @@ class ScratchChord {
             return;
         }
         this.actor.grab_key_focus();
-        this.timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, CHORD_TIMEOUT_MS, () => {
-            this.timeoutId = null;
-            this.close();
-            return GLib.SOURCE_REMOVE;
-        });
+        this._resetTimeout(CHORD_TIMEOUT_MS);
     }
 
     close() {
@@ -425,8 +435,15 @@ class ScratchChord {
     }
 
     _onKeyPress(_actor, event) {
+        if (this.closeOnKeyRelease)
+            return Clutter.EVENT_STOP;
+
         if (event.get_key_symbol() === Clutter.KEY_Escape) {
-            this.close();
+            this.closeOnKeyRelease = true;
+            this.pendingKeyCode = event.get_key_code();
+            this.pendingOperation = null;
+            Utils.timeout_remove(this.timeoutId);
+            this.timeoutId = null;
             return Clutter.EVENT_STOP;
         }
 
@@ -434,22 +451,133 @@ class ScratchChord {
         if (layer === undefined)
             return Clutter.EVENT_STOP;
         if (layer === null) {
-            this.close();
+            this.closeOnKeyRelease = true;
+            this.pendingKeyCode = event.get_key_code();
+            Utils.timeout_remove(this.timeoutId);
+            this.timeoutId = null;
             return Clutter.EVENT_STOP;
         }
 
         const operation = this.operation;
         const metaWindow = this.metaWindow;
-        this.close();
-        Utils.timeout_remove(operationIdleId);
-        operationIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+        this.closeOnKeyRelease = true;
+        this.pendingKeyCode = event.get_key_code();
+        Utils.timeout_remove(this.timeoutId);
+        this.timeoutId = null;
+        this.pendingOperation = () => {
             if (operation === 'layer')
                 toggleLayer(layer);
+            else if (operation === 'switch')
+                switchLayer(layer);
             else
                 toggleInLayer(metaWindow, layer);
-            operationIdleId = null;
-            return GLib.SOURCE_REMOVE;
-        });
+        };
         return Clutter.EVENT_STOP;
     }
+
+    _onKeyRelease(_actor, event) {
+        if (!this.closeOnKeyRelease || event.get_key_code() !== this.pendingKeyCode)
+            return Clutter.EVENT_STOP;
+
+        const operation = this.pendingOperation;
+        this.close();
+        if (operation)
+            runAfterChord(operation);
+        return Clutter.EVENT_STOP;
+    }
+
+    _showHint(title) {
+        if (!Settings.prefs.show_scratch_chord_hint)
+            return;
+
+        const summary = layerSummary();
+        const text = `${title}\nPress a layer key (A-Z or 0-9)` +
+            (summary ? `\n\n${summary}` : '\n\nNo occupied layers');
+        if (!this.hint) {
+            this.hint = new St.Label({
+                style_class: 'scratch-chord-hint',
+                width: 440,
+            });
+            this.actor.add_child(this.hint);
+        }
+        this.hint.text = text;
+        this._positionHint();
+    }
+
+    _positionHint() {
+        if (!this.hint)
+            return;
+        const monitor = Main.layoutManager.currentMonitor ?? Main.layoutManager.primaryMonitor;
+        this.hint.set_position(
+            monitor.x + Math.floor((monitor.width - this.hint.width) / 2),
+            monitor.y + Math.floor(monitor.height * 0.16));
+    }
+
+    _resetTimeout(timeout) {
+        Utils.timeout_remove(this.timeoutId);
+        this.timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, timeout, () => {
+            this.timeoutId = null;
+            this.close();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+}
+
+class ScratchContinuation {
+    constructor() {
+        this.signalId = null;
+        this.timeoutId = null;
+    }
+
+    open() {
+        this.signalId = global.stage.connect('captured-event', (_actor, event) => {
+            if (event.type() !== Clutter.EventType.KEY_PRESS)
+                return Clutter.EVENT_PROPAGATE;
+
+            const key = event.get_key_symbol();
+            const modifierMask =
+                Clutter.ModifierType.SHIFT_MASK |
+                Clutter.ModifierType.CONTROL_MASK |
+                Clutter.ModifierType.MOD1_MASK |
+                Clutter.ModifierType.META_MASK |
+                Clutter.ModifierType.SUPER_MASK;
+            if ((key === Clutter.KEY_Tab || key === Clutter.KEY_ISO_Left_Tab) &&
+                !(event.get_state() & modifierMask)) {
+                this.close();
+                beginChord('switch');
+                return Clutter.EVENT_STOP;
+            }
+            if (layerFromEvent(event) !== undefined)
+                this.close();
+            return Clutter.EVENT_PROPAGATE;
+        });
+        this.timeoutId = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            RECENT_CONTINUATION_TIMEOUT_MS,
+            () => {
+                this.timeoutId = null;
+                this.close();
+                return GLib.SOURCE_REMOVE;
+            });
+    }
+
+    close() {
+        Utils.timeout_remove(this.timeoutId);
+        this.timeoutId = null;
+        if (this.signalId) {
+            global.stage.disconnect(this.signalId);
+            this.signalId = null;
+        }
+        if (chord === this)
+            chord = null;
+    }
+}
+
+function runAfterChord(callback) {
+    Utils.timeout_remove(operationIdleId);
+    operationIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+        callback();
+        operationIdleId = null;
+        return GLib.SOURCE_REMOVE;
+    });
 }
